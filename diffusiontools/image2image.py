@@ -67,7 +67,7 @@ class StableDiffusionImg2ImgPipeline(DiffusionPipeline):
             raise ValueError(f"`prompt` has to be of type `str` or `list` but is {type(prompt)}")
 
         if strength < 0 or strength > 1:
-            raise ValueError(f"The value of strength should in [0.0, 1.0] but is {strength}")
+          raise ValueError(f'The value of strength should in [0.0, 1.0] but is {strength}')
 
         # set timesteps
         accepts_offset = "offset" in set(inspect.signature(self.scheduler.set_timesteps).parameters.keys())
@@ -85,14 +85,14 @@ class StableDiffusionImg2ImgPipeline(DiffusionPipeline):
 
         # prepare init_latents noise to latents
         init_latents = torch.cat([init_latents] * batch_size)
-
+        
         # get the original timestep using init_timestep
         init_timestep = int(num_inference_steps * strength) + offset
         init_timestep = min(init_timestep, num_inference_steps)
-        # FIXME: breaks here
         timesteps = self.scheduler.timesteps[-init_timestep]
         timesteps = torch.tensor([timesteps] * batch_size, dtype=torch.long, device=self.device)
-
+        # timesteps = torch.tensor([int(timesteps)] * batch_size, dtype=torch.long, device=self.device)  # albarji
+        
         # add noise to latents using the timesteps
         noise = torch.randn(init_latents.shape, generator=generator, device=self.device)
         init_latents = self.scheduler.add_noise(init_latents, noise, timesteps)
@@ -123,6 +123,7 @@ class StableDiffusionImg2ImgPipeline(DiffusionPipeline):
             # Here we concatenate the unconditional and text embeddings into a single batch
             # to avoid doing two forward passes
             text_embeddings = torch.cat([uncond_embeddings, text_embeddings])
+
 
         # prepare extra kwargs for the scheduler step, since not all schedulers have the same signature
         # eta (η) is only used with the DDIMScheduler, it will be ignored for other schedulers.
