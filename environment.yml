@@ -1,0 +1,7 @@
+name: stable_diffusion
+dependencies:
+  - pip=22.1.*
+  - pip
+    - diffusers==0.2.*
+    - ftfy==6.1.*
+    - transformers==4.21.*

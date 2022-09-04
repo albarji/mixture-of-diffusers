@@ -1,17 +1,22 @@
-"""Original file at https://github.com/huggingface/diffusers/blob/main/examples/inference/image_to_image.py"""
-
 import inspect
 from typing import List, Optional, Union
 
 import torch
+import torch.nn.functional as F
 
-from diffusers import AutoencoderKL, DDIMScheduler, DiffusionPipeline, PNDMScheduler, UNet2DConditionModel
-from diffusers.pipelines.stable_diffusion import StableDiffusionSafetyChecker
+import PIL
 from tqdm.auto import tqdm
 from transformers import CLIPFeatureExtractor, CLIPTextModel, CLIPTokenizer
 
+from diffusers.models import AutoencoderKL, UNet2DConditionModel
+from diffusers.pipeline_utils import DiffusionPipeline
+from diffusers.schedulers import DDIMScheduler, PNDMScheduler
+from diffusers.pipelines.stable_diffusion import StableDiffusionSafetyChecker
 
-class StableDiffusionImg2ImgPipeline(DiffusionPipeline):
+from diffusiontools.extrasmixin import StableDiffusionExtrasMixin
+
+
+class StableDiffusionInpaintPipeline(DiffusionPipeline, StableDiffusionExtrasMixin):
     def __init__(
         self,
         vae: AutoencoderKL,
@@ -38,8 +43,9 @@ class StableDiffusionImg2ImgPipeline(DiffusionPipeline):
     def __call__(
         self,
         prompt: Union[str, List[str]],
-        init_image: torch.FloatTensor,
-        strength: float = 0.8,
+        init_image: Union[torch.FloatTensor, PIL.Image.Image],
+        mask_image: Union[torch.FloatTensor, PIL.Image.Image],
+        # strength: float = 0.8, # strength is kind of useless here, maybe remove it, like in https://colab.research.google.com/drive/1whhIiXxjQjbBuiq4lqwh-AlLIjh3l1OB#scrollTo=iWTATm2txIZZ
         num_inference_steps: Optional[int] = 50,
         guidance_scale: Optional[float] = 7.5,
         eta: Optional[float] = 0.0,
@@ -54,8 +60,8 @@ class StableDiffusionImg2ImgPipeline(DiffusionPipeline):
         else:
             raise ValueError(f"`prompt` has to be of type `str` or `list` but is {type(prompt)}")
 
-        if strength < 0 or strength > 1:
-          raise ValueError(f'The value of strength should in [0.0, 1.0] but is {strength}')
+        # if strength < 0 or strength > 1:
+        #     raise ValueError(f"The value of strength should in [0.0, 1.0] but is {strength}")
 
         # set timesteps
         accepts_offset = "offset" in set(inspect.signature(self.scheduler.set_timesteps).parameters.keys())
@@ -67,23 +73,48 @@ class StableDiffusionImg2ImgPipeline(DiffusionPipeline):
 
         self.scheduler.set_timesteps(num_inference_steps, **extra_set_kwargs)
 
+        # preprocess image
+        init_image = init_image.to(self.device)
+
         # encode the init image into latents and scale the latents
-        init_latents = self.vae.encode(init_image.to(self.device)).sample()
+        init_latents = self.vae.encode(init_image).sample()
         init_latents = 0.18215 * init_latents
 
-        # prepare init_latents noise to latents
+        # Expand init_latents for batch_size
         init_latents = torch.cat([init_latents] * batch_size)
-        
+        init_latents_orig = init_latents
+
+        # preprocess mask
+        mask = mask_image.to(self.device)
+        mask = torch.cat([mask] * batch_size)
+        print(mask[0, 0, 0, :]) # FIXME
+
+        # check sizes
+        if not mask.shape == init_latents.shape:
+            raise ValueError("The mask and init_image should be the same size!")
+
         # get the original timestep using init_timestep
-        init_timestep = int(num_inference_steps * strength) + offset
+        # init_timestep = int(num_inference_steps * strength) + offset
+        init_timestep = int(num_inference_steps) + offset
         init_timestep = min(init_timestep, num_inference_steps)
         timesteps = self.scheduler.timesteps[-init_timestep]
         timesteps = torch.tensor([timesteps] * batch_size, dtype=torch.long, device=self.device)
-        # timesteps = torch.tensor([int(timesteps)] * batch_size, dtype=torch.long, device=self.device)  # albarji
-        
+
         # add noise to latents using the timesteps
         noise = torch.randn(init_latents.shape, generator=generator, device=self.device)
         init_latents = self.scheduler.add_noise(init_latents, noise, timesteps)
+        # Compute smoothed version of latents
+        smooth_factor = 9
+        weights = torch.ones([smooth_factor, smooth_factor], device=self.device) / (smooth_factor*smooth_factor)
+        weights = weights.view(1, 1, smooth_factor, smooth_factor).repeat(init_latents.shape[0], init_latents.shape[1], 1, 1)
+        smoothed_latents = F.conv2d(init_latents, weights, padding="same")
+        # Initialize the inpainting latents near the frontier as the smoothed latents, but use pure noise far from the frontier
+        # Keep original latents in the init region
+        smoothed_mask = F.conv2d(mask, weights, padding="same")
+        init_latents = init_latents * mask + (1 - mask) * (smoothed_mask * smoothed_latents + (1 - smoothed_mask) * noise)
+        # Only use initial image where masking is off. This way we allow unconditional drawing in inpainting regions
+        # smoothed_latents = smoothed_latents * mask + noise * (1 - mask)
+        # init_latents = init_latents * mask + noise * (1 - mask)
 
         # get prompt text embeddings
         text_input = self.tokenizer(
@@ -112,7 +143,6 @@ class StableDiffusionImg2ImgPipeline(DiffusionPipeline):
             # to avoid doing two forward passes
             text_embeddings = torch.cat([uncond_embeddings, text_embeddings])
 
-
         # prepare extra kwargs for the scheduler step, since not all schedulers have the same signature
         # eta (η) is only used with the DDIMScheduler, it will be ignored for other schedulers.
         # eta corresponds to η in DDIM paper: https://arxiv.org/abs/2010.02502
@@ -139,14 +169,23 @@ class StableDiffusionImg2ImgPipeline(DiffusionPipeline):
             # compute the previous noisy sample x_t -> x_t-1
             latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs)["prev_sample"]
 
-        # scale and decode the image latents with vae
+            # masking
+            init_latents_proper = self.scheduler.add_noise(init_latents_orig, noise, t)
+            latents = (init_latents_proper * mask) + (latents * (1 - mask))
+
+            if not (i % 10): # FIXME
+                self.decode_latents(latents)[0].save(f"outputs/debug_step_{i}.png")
+
+        print(latents[0, 0, 0, :]) # FIXME
+
+        # scale and decode the image latents with vae # TODO: replace by utility function
         latents = 1 / 0.18215 * latents
         image = self.vae.decode(latents)
 
         image = (image / 2 + 0.5).clamp(0, 1)
         image = image.cpu().permute(0, 2, 3, 1).numpy()
 
-        # run safety checker
+        # run safety checker # TODO remove
         safety_cheker_input = self.feature_extractor(self.numpy_to_pil(image), return_tensors="pt").to(self.device)
         image, has_nsfw_concept = self.safety_checker(images=image, clip_input=safety_cheker_input.pixel_values)
 
