@@ -2,9 +2,7 @@ import inspect
 from typing import List, Optional, Union
 
 import torch
-import torch.nn.functional as F
 
-import PIL
 from tqdm.auto import tqdm
 from transformers import CLIPFeatureExtractor, CLIPTextModel, CLIPTokenizer
 
@@ -48,10 +46,12 @@ class StableDiffusionTilingPipeline(DiffusionPipeline, StableDiffusionExtrasMixi
         guidance_scale: Optional[float] = 7.5,
         eta: Optional[float] = 0.0,
         generator: Optional[torch.Generator] = None,
-        output_type: Optional[str] = "pil",
         tile_height: Optional[int] = 512,
         tile_width: Optional[int] = 512,
-        tile_overlap: Optional[int] = 256
+        tile_row_overlap: Optional[int] = 256,
+        tile_col_overlap: Optional[int] = 256,
+        guidance_scale_tiles: Optional[List[List[float]]] = None,
+        cpu_vae: Optional[bool] = False,
     ):
 
         if not isinstance(prompt, list) or not all(isinstance(row, list) for row in prompt):
@@ -71,12 +71,12 @@ class StableDiffusionTilingPipeline(DiffusionPipeline, StableDiffusionExtrasMixi
             extra_set_kwargs["offset"] = 1
 
         # create original noisy latents using the timesteps
-        height = tile_height + (grid_rows - 1) * (tile_height - tile_overlap)
-        width = tile_width + (grid_cols - 1) * (tile_width - tile_overlap)
+        height = tile_height + (grid_rows - 1) * (tile_height - tile_row_overlap)
+        width = tile_width + (grid_cols - 1) * (tile_width - tile_col_overlap)
         latents_shape = (batch_size, self.unet.in_channels, height // 8, width // 8)
         latents = torch.randn(latents_shape, generator=generator, device=self.device)
 
-        # set timesteps
+        # set timesteps # FIXME: this is redundant with section above
         accepts_offset = "offset" in set(inspect.signature(self.scheduler.set_timesteps).parameters.keys())
         extra_set_kwargs = {}
         if accepts_offset:
@@ -113,7 +113,7 @@ class StableDiffusionTilingPipeline(DiffusionPipeline, StableDiffusionExtrasMixi
         # here `guidance_scale` is defined analog to the guidance weight `w` of equation (2)
         # of the Imagen paper: https://arxiv.org/pdf/2205.11487.pdf . `guidance_scale = 1`
         # corresponds to doing no classifier free guidance.
-        do_classifier_free_guidance = guidance_scale > 1.0
+        do_classifier_free_guidance = guidance_scale > 1.0  # TODO: also active if any tile has guidance scale
         # get unconditional embeddings for classifier free guidance
         if do_classifier_free_guidance:
             for i in range(grid_rows):
@@ -148,7 +148,7 @@ class StableDiffusionTilingPipeline(DiffusionPipeline, StableDiffusionExtrasMixi
             for row in range(grid_rows):
                 noise_preds_row = []
                 for col in range(grid_cols):
-                    px_row_init, px_row_end, px_col_init, px_col_end = _tile2latent_indices(row, col, tile_width, tile_height, tile_overlap)
+                    px_row_init, px_row_end, px_col_init, px_col_end = _tile2latent_indices(row, col, tile_width, tile_height, tile_row_overlap, tile_col_overlap)
                     tile_latents = latents[:, :, px_row_init:px_row_end, px_col_init:px_col_end]
                     # expand the latents if we are doing classifier free guidance
                     latent_model_input = torch.cat([tile_latents] * 2) if do_classifier_free_guidance else tile_latents
@@ -161,7 +161,8 @@ class StableDiffusionTilingPipeline(DiffusionPipeline, StableDiffusionExtrasMixi
                     # perform guidance
                     if do_classifier_free_guidance:
                         noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-                        noise_pred_tile = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
+                        guidance = guidance_scale if guidance_scale_tiles is None or guidance_scale_tiles[row][col] is None else guidance_scale_tiles[row][col]
+                        noise_pred_tile = noise_pred_uncond + guidance * (noise_pred_text - noise_pred_uncond)
                         noise_preds_row.append(noise_pred_tile)
                 noise_preds.append(noise_preds_row)
             # Stitch noise predictions for all tiles
@@ -170,24 +171,11 @@ class StableDiffusionTilingPipeline(DiffusionPipeline, StableDiffusionExtrasMixi
             # Add each tile contribution to overall latents
             for row in range(grid_rows):
                 for col in range(grid_cols):
-                    px_row_init, px_row_end, px_col_init, px_col_end = _tile2latent_indices(row, col, tile_width, tile_height, tile_overlap)
+                    px_row_init, px_row_end, px_col_init, px_col_end = _tile2latent_indices(row, col, tile_width, tile_height, tile_row_overlap, tile_col_overlap)
                     noise_pred[:, :, px_row_init:px_row_end, px_col_init:px_col_end] += noise_preds[row][col] * tile_weights
                     contributors[:, :, px_row_init:px_row_end, px_col_init:px_col_end] += tile_weights
             # Average overlapping areas with more than 1 contributor
             noise_pred /= contributors
-
-            # # Upper-left tile: copy noise as it is
-            # noise_pred[0:tile_height, 0:tile_width] = noise_preds[0][0]
-            # # First row after upper-left tile: average noise in overlap area, copy in rest
-            # for col in range(1, grid_cols):
-            #     noise_pred[0:tile_height, (tile_width*col-tile_overlap):(tile_width*col)] += noise_preds[0][col][:, 0:tile_overlap]
-            #     noise_pred[0:tile_height, (tile_width*col-tile_overlap):(tile_width*col)] /= 2
-            #     noise_pred[0:tile_height, tile_width-tile_overlap:tile_width]
-            # for row in range(grid_rows):
-            #     # First col of row: copy noise
-            #     noise_pred[row * ]
-
-            #     for col in range(grid_cols):
 
             # compute the previous noisy sample x_t -> x_t-1
             if isinstance(self.scheduler, LMSDiscreteScheduler):
@@ -195,21 +183,10 @@ class StableDiffusionTilingPipeline(DiffusionPipeline, StableDiffusionExtrasMixi
             else:
                 latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs)["prev_sample"]
 
-        # scale and decode the image latents with vae # TODO: replace by utility function
-        latents = 1 / 0.18215 * latents
-        image = self.vae.decode(latents)
+        # scale and decode the image latents with vae
+        image = self.decode_latents(latents, cpu_vae)
 
-        image = (image / 2 + 0.5).clamp(0, 1)
-        image = image.cpu().permute(0, 2, 3, 1).numpy()
-
-        # run safety checker # TODO remove
-        safety_cheker_input = self.feature_extractor(self.numpy_to_pil(image), return_tensors="pt").to(self.device)
-        image, has_nsfw_concept = self.safety_checker(images=image, clip_input=safety_cheker_input.pixel_values)
-
-        if output_type == "pil":
-            image = self.numpy_to_pil(image)
-
-        return {"sample": image, "nsfw_content_detected": has_nsfw_concept}
+        return {"sample": image}
 
     def _gaussian_weights(self, tile_width, tile_height, nbatches):
         """Generates a gaussian mask of weights for tile contributions"""
@@ -230,7 +207,7 @@ class StableDiffusionTilingPipeline(DiffusionPipeline, StableDiffusionExtrasMixi
 
 
 
-def _tile2pixel_indices(tile_row, tile_col, tile_width, tile_height, tile_overlap):
+def _tile2pixel_indices(tile_row, tile_col, tile_width, tile_height, tile_row_overlap, tile_col_overlap):
     """Given a tile row and column numbers returns the range of pixels affected by that tiles in the overall image
     
     Returns a tuple with:
@@ -239,14 +216,14 @@ def _tile2pixel_indices(tile_row, tile_col, tile_width, tile_height, tile_overla
         - Starting coordinates of columns in pixel space
         - Ending coordinates of columns in pixel space
     """
-    px_row_init = 0 if tile_row == 0 else tile_row * (tile_height - tile_overlap)
+    px_row_init = 0 if tile_row == 0 else tile_row * (tile_height - tile_row_overlap)
     px_row_end = px_row_init + tile_height
-    px_col_init = 0 if tile_col == 0 else tile_col * (tile_width - tile_overlap)
+    px_col_init = 0 if tile_col == 0 else tile_col * (tile_width - tile_col_overlap)
     px_col_end = px_col_init + tile_width
     return px_row_init, px_row_end, px_col_init, px_col_end
 
 
-def _tile2latent_indices(tile_row, tile_col, tile_width, tile_height, tile_overlap):
+def _tile2latent_indices(tile_row, tile_col, tile_width, tile_height, tile_row_overlap, tile_col_overlap):
     """Given a tile row and column numbers returns the range of latents affected by that tiles in the overall image
     
     Returns a tuple with:
@@ -255,5 +232,5 @@ def _tile2latent_indices(tile_row, tile_col, tile_width, tile_height, tile_overl
         - Starting coordinates of columns in latent space
         - Ending coordinates of columns in latent space
     """
-    px_row_init, px_row_end, px_col_init, px_col_end = _tile2pixel_indices(tile_row, tile_col, tile_width, tile_height, tile_overlap)
+    px_row_init, px_row_end, px_col_init, px_col_end = _tile2pixel_indices(tile_row, tile_col, tile_width, tile_height, tile_row_overlap, tile_col_overlap)
     return px_row_init // 8, px_row_end // 8, px_col_init // 8, px_col_end // 8
