@@ -15,24 +15,27 @@ def dummy_checker(images, **kwargs):
     return images, False
 
 
-def generate_variations(prompt, height=512, width=512, seed=None, gc=None, steps=None, init_image=None, mask_image=None, mask_smoothing=None, init_strength=None, n=25):
+def generate_variations(prompt, height=512, width=512, seed=None, gc=None, steps=None, init_image=None, mask_image=None, mask_smoothing=None, init_strength=None, n=25, preloaded_pipeline=None):
     # Load model
-    model_id = "CompVis/stable-diffusion-v1-4"
-    # Scheduler depends on pipeline. img2img requires a scheduler with integer timestep indexes,
-    # not the case for LMSDiscreteScheduler
-    scheduler = (
-        DDIMScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", clip_sample=False, set_alpha_to_one=False) if init_image
-        else LMSDiscreteScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", num_train_timesteps=1000)
-    )
-    if mask_image:
-        pipelinekind = StableDiffusionInpaintPipeline
-    elif init_image:
-        pipelinekind = StableDiffusionImg2ImgPipeline
+    if not preloaded_pipeline:
+        model_id = "CompVis/stable-diffusion-v1-4"
+        # Scheduler depends on pipeline. img2img requires a scheduler with integer timestep indexes,
+        # not the case for LMSDiscreteScheduler
+        scheduler = (
+            DDIMScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", clip_sample=False, set_alpha_to_one=False) if init_image
+            else LMSDiscreteScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", num_train_timesteps=1000)
+        )
+        if mask_image:
+            pipelinekind = StableDiffusionInpaintPipeline
+        elif init_image:
+            pipelinekind = StableDiffusionImg2ImgPipeline
+        else:
+            pipelinekind = StableDiffusionPipeline
+        pipe = pipelinekind.from_pretrained(model_id, scheduler=scheduler, use_auth_token=True).to("cuda:0")
+        # Override safety checker
+        pipe.safety_checker = dummy_checker
     else:
-        pipelinekind = StableDiffusionPipeline
-    pipe = pipelinekind.from_pretrained(model_id, scheduler=scheduler, use_auth_token=True).to("cuda:0")
-    # Override safety checker
-    pipe.safety_checker = dummy_checker
+        pipe = preloaded_pipeline
 
     # Load init image (if provided)
     if init_image:
@@ -46,6 +49,7 @@ def generate_variations(prompt, height=512, width=512, seed=None, gc=None, steps
         mask = preprocess_mask(mask, mask_smoothing)
 
     ## Generate variations
+    generated_images = []
     for _ in range(n):
         # Prepare parameters
         gc_image = gc if gc is not None else np.random.randint(5, 30)
@@ -72,6 +76,9 @@ def generate_variations(prompt, height=512, width=512, seed=None, gc=None, steps
             pipeargs = {**pipeargs, "height": height, "width": width}
         image = pipe(**pipeargs)["sample"][0]
         image.save(f"{outname}.png")
+        generated_images.append(image)
+
+    return generated_images
 
 
 if __name__ == "__main__":

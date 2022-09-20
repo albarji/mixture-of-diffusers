@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 class StableDiffusionExtrasMixin:
     """Mixin providing additional convenience method to Stable Diffusion pipelines"""
 
@@ -5,11 +7,14 @@ class StableDiffusionExtrasMixin:
         """Decodes a given array of latents into pixel space"""
         # scale and decode the image latents with vae
         if cpu_vae:
-            latents = latents.cpu()
-            vae = self.vae.cpu()
+            lat = deepcopy(latents).cpu()
+            vae = deepcopy(self.vae).cpu()
+        else:
+            lat = latents
+            vae = self.vae
 
-        latents = 1 / 0.18215 * latents
-        image = vae.decode(latents)
+        lat = 1 / 0.18215 * lat
+        image = vae.decode(lat)
 
         image = (image / 2 + 0.5).clamp(0, 1)
         image = image.cpu().permute(0, 2, 3, 1).numpy()
