@@ -1,5 +1,6 @@
 import datetime;
 from diffusers import LMSDiscreteScheduler, DDIMScheduler
+import git
 import json
 import numpy as np
 import torch
@@ -12,10 +13,10 @@ n = 1
 sche = "lms"
 gc = 8
 seed = 4821955176
-steps = 100
+#steps = 100
 #steps = 50
 #steps = 10
-#steps = 1
+steps = 1
 
 suffix = "elegant, highly detailed, smooth, sharp focus, artstation, stunning masterpiece"
 filler = f"a pathways and staircases floating in deep space, a constellation of stars and planets and black holes in the background, art by style of escher and patrick mcenvoy and michael komarck, {suffix}"
@@ -202,6 +203,7 @@ for _ in range(n):
                 "gc_tiles": gc_tiles,
                 "steps": steps_image,
                 "cpu_vae": cpu_vae,
+                "git_commit": git.Repo(search_parent_directories=True).head.object.hexsha,
             },
             f,
             sort_keys=True,
