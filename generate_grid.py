@@ -1,9 +1,9 @@
+from copy import deepcopy
 import datetime;
 from diffusers import LMSDiscreteScheduler, DDIMScheduler
 import git
 import json
 import numpy as np
-import torch
 
 from diffusiontools.tiling import StableDiffusionTilingPipeline
 
@@ -13,29 +13,27 @@ n = 1
 sche = "lms"
 gc = 8
 seed = 4821955176
-#steps = 100
+steps = 100
 #steps = 50
 #steps = 10
-steps = 1
+#steps = 5
 
 suffix = "elegant, highly detailed, smooth, sharp focus, artstation, stunning masterpiece"
 filler = f"a pathways and staircases floating in deep space, a constellation of stars and planets and black holes in the background, art by style of escher and patrick mcenvoy and michael komarck, {suffix}"
 prompt = [
     [
         f"{filler}",
-        f"An archway leading to a starry nigh, art by van gogh and patrick mcenvoy and michael komarck, {suffix}",
-        f"{filler}",
-        f"An archway leading to a nightmare world full of bloody eyes and jaws, art by Hans Ruedi Giger and patrick mcenvoy and michael komarck, {suffix}",
+        f"An archway in the foreground, pathways and staircases floating in deep space, a constellation of stars and planets and black holes in the background, art by van gogh and patrick mcenvoy and michael komarck, {suffix}",
+        f"painting of truth of the universe, a colorful supernova exploding, a constellation of stars and planets and black holes in the background, a hooded figure facing the camera in the bottom, {suffix}",
+        f"An archway in the foreground, pathways and staircases floating in deep space, a constellation of stars and planets and black holes in the background, art by kandinsky and picasso and miro and escher and patrick mcenvoy and michael komarck, {suffix}",
         f"{filler}",
     ],
     [
-        #"An archway leading to a landscape of hell, art by Hieronymus Bosch, {suffix}",
-        #"A rift in space showing a view of a massive tower of babel in the center of hell, in the style of Hieronymus Bosch, a constellation of stars and planets and black holes in the background, {suffix}",
-        "A view from a cave of a landscape of hell, with lost souls wandering about, art by patrick mcenvoy and michael komarck and greg rutkowski, {suffix}",
+        f"A magical portal leading to a citadel made of stone, art by adrianus eversen, twilight lighting, {suffix}",
         f"{filler}",
-        "A hooded figure facing the camera, with tentacles instead of feet, holding a large golden intricate key, art by patrick mcenvoy and michael komarck, {suffix}",
+        f"A hooded figure facing the camera, with tentacles instead of feet, holding a large golden intricate key, art by patrick mcenvoy and michael komarck, {suffix}, robe with arcane symbols and runes",
         f"{filler}",
-        f"A An archway leading to a meadow with dragons with rainbow crystal mountains and forests in the background, art by alayna danner, {suffix}"
+        f"A magical portal leading to a futuristic city with crystal skyscrappers and zeppelings in the background, art by alayna danner, {suffix}"
     ]
 ]
 
@@ -44,11 +42,230 @@ gc_tiles = [
     [None, None, 8.0, None, 6.0],
 ]
 
+seed_tiles = [
+    [None, None, None, None, None],
+    [9210074984, None, None, None, 9546803418],
+]
+seed_tiles_mode = StableDiffusionTilingPipeline.SeedTilesMode.FULL.value
+
+seed_reroll_regions = [
+    (0, 366, 990, 1228, 8979961135),
+    (759, 1022, 1200, 1348, 2737442638)
+]
+
 tile_height = 640
 tile_width = 640
 tile_row_overlap = 256
 tile_col_overlap = 256
 cpu_vae = True
+
+# suffix = "elegant, highly detailed, smooth, sharp focus, artstation, stunning masterpiece"
+# filler = f"a pathways and staircases floating in deep space, a constellation of stars and planets and black holes in the background, art by style of escher and patrick mcenvoy and michael komarck, {suffix}"
+# prompt = [
+#     [
+#         f"{filler}",
+#         f"An archway in the foreground, pathways and staircases floating in deep space, a constellation of stars and planets and black holes in the background, art by van gogh and patrick mcenvoy and michael komarck, {suffix}",
+#         f"painting of truth of the universe, a colorful supernova exploding, a constellation of stars and planets and black holes in the background, a hooded figure facing the camera in the bottom, {suffix}",
+#         f"An archway in the foreground, pathways and staircases floating in deep space, a constellation of stars and planets and black holes in the background, art by kandinsky and picasso and miro and escher and patrick mcenvoy and michael komarck, {suffix}",
+#         f"{filler}",
+#     ],
+#     [
+#         f"A magical portal leading to a citadel made of stone, art by adrianus eversen, twilight lighting, {suffix}",
+#         f"{filler}",
+#         f"A hooded figure facing the camera, with tentacles instead of feet, holding a large golden intricate key, art by patrick mcenvoy and michael komarck, {suffix}, robe with arcane symbols and runes",
+#         f"{filler}",
+#         f"A An archway leading to a meadow with dragons with rainbow crystal mountains and forests in the background, art by alayna danner, {suffix}"
+#     ]
+# ]
+
+# gc_tiles = [
+#     [None, 8.0, None, None, None],
+#     [None, None, 8.0, None, 6.0],
+# ]
+
+# seed_tiles = [
+#     [None, None, None, None, None],
+#     #[3582643549, None, None, None, None],
+#     [9210074984, None, None, None, None],
+# ]
+# seed_tiles_mode = StableDiffusionTilingPipeline.SeedTilesMode.FULL.value
+
+# seed_reroll_regions = [
+#     (0, 366, 990, 1228, 8979961135),
+# ]
+
+# tile_height = 640
+# tile_width = 640
+# tile_row_overlap = 256
+# tile_col_overlap = 256
+# cpu_vae = True
+
+# suffix = "elegant, highly detailed, smooth, sharp focus, artstation, stunning masterpiece"
+# filler = f"a pathways and staircases floating in deep space, a constellation of stars and planets and black holes in the background, art by style of escher and patrick mcenvoy and michael komarck, {suffix}"
+# prompt = [
+#     [
+#         f"{filler}",
+#         f"An archway in the foreground, pathways and staircases floating in deep space, a constellation of stars and planets and black holes in the background, art by van gogh and patrick mcenvoy and michael komarck, {suffix}",
+#         #f"Impressive ominous cinematic fantastic realism comic book style painting of a spiraling exploding sun launching rays across the dark cosmos, lighting impressive masterpiece hyper ultra detailed intricate sharp focus 8 k realistic illustration canon eos r 3 fujifilm x - t 3 0 sony alpha, artgerm colorful!!!, trending on artstation behance cgsociety, octane render nvidia raytracing demo",
+#         #f"A painting of a giant sun in the center, radius of light, millions of shooting star, pathways and staircases floating in deep space, a constellation of stars and planets and black holes in the background, symmetry, art by patrick mcenvoy and michael komarck, {suffix}",
+#         #f"painting of truth of the universe, highly detailed",
+#         #f"painting of truth of the universe, {suffix}",
+#         #f"painting of truth of the universe, a constellation of stars and planets and black holes in the background, {suffix}",
+#         f"painting of truth of the universe, a colorful supernova exploding, a constellation of stars and planets and black holes in the background, a hooded figure facing the camera in the bottom, {suffix}",
+#         f"An archway in the foreground, pathways and staircases floating in deep space, a constellation of stars and planets and black holes in the background, art by kandinsky and picasso and miro and escher and patrick mcenvoy and michael komarck, {suffix}",
+#         f"{filler}",
+#     ],
+#     [
+#         #"An archway leading to a landscape of hell, art by Hieronymus Bosch, {suffix}",
+#         #"A rift in space showing a view of a massive tower of babel in the center of hell, in the style of Hieronymus Bosch, a constellation of stars and planets and black holes in the background, {suffix}",
+#         f"A view from a cave of a landscape of hell, with lost souls wandering about, art by adrianus eversen, {suffix}",
+#         f"{filler}",
+#         f"A hooded figure facing the camera, with tentacles instead of feet, holding a large golden intricate key, art by patrick mcenvoy and michael komarck, {suffix}",
+#         f"{filler}",
+#         f"A An archway leading to a meadow with dragons with rainbow crystal mountains and forests in the background, art by alayna danner, {suffix}"
+#     ]
+# ]
+
+# gc_tiles = [
+#     [None, 8.0, None, None, None],
+#     [None, None, 8.0, None, 6.0],
+# ]
+
+# seed_tiles = [
+#     [None, None, None, None, None],
+#     [3582643549, None, None, None, None],
+# ]
+# seed_tiles_mode = StableDiffusionTilingPipeline.SeedTilesMode.FULL.value
+
+# seed_reroll_regions = [
+#     (0, 366, 990, 1228, 8979961135)
+# ]
+
+# tile_height = 640
+# tile_width = 640
+# tile_row_overlap = 256
+# tile_col_overlap = 256
+# cpu_vae = True
+
+# suffix = "elegant, highly detailed, smooth, sharp focus, artstation, stunning masterpiece"
+# filler = f"a pathways and staircases floating in deep space, a constellation of stars and planets and black holes in the background, art by style of escher and patrick mcenvoy and michael komarck, {suffix}"
+# prompt = [
+#     [
+#         f"{filler}",
+#         f"An archway in the foreground, pathways and staircases floating in deep space, a constellation of stars and planets and black holes in the background, art by van gogh and patrick mcenvoy and michael komarck, {suffix}",
+#         #f"Impressive ominous cinematic fantastic realism comic book style painting of a spiraling exploding sun launching rays across the dark cosmos, lighting impressive masterpiece hyper ultra detailed intricate sharp focus 8 k realistic illustration canon eos r 3 fujifilm x - t 3 0 sony alpha, artgerm colorful!!!, trending on artstation behance cgsociety, octane render nvidia raytracing demo",
+#         #f"A painting of a giant sun in the center, radius of light, millions of shooting star, pathways and staircases floating in deep space, a constellation of stars and planets and black holes in the background, symmetry, art by patrick mcenvoy and michael komarck, {suffix}",
+#         #f"painting of truth of the universe, highly detailed",
+#         #f"painting of truth of the universe, {suffix}",
+#         #f"painting of truth of the universe, a constellation of stars and planets and black holes in the background, {suffix}",
+#         f"painting of truth of the universe, a colorful supernova exploding, a constellation of stars and planets and black holes in the background, {suffix}",
+#         f"An archway in the foreground, pathways and staircases floating in deep space, a constellation of stars and planets and black holes in the background, art by kandinsky and picasso and miro and escher and patrick mcenvoy and michael komarck, {suffix}",
+#         f"{filler}",
+#     ],
+#     [
+#         #"An archway leading to a landscape of hell, art by Hieronymus Bosch, {suffix}",
+#         #"A rift in space showing a view of a massive tower of babel in the center of hell, in the style of Hieronymus Bosch, a constellation of stars and planets and black holes in the background, {suffix}",
+#         f"A view from a cave of a landscape of hell, with lost souls wandering about, art by adrianus eversen, {suffix}",
+#         f"{filler}",
+#         f"A hooded figure facing the camera, with tentacles instead of feet, holding a large golden intricate key, art by patrick mcenvoy and michael komarck, {suffix}",
+#         f"{filler}",
+#         f"A An archway leading to a meadow with dragons with rainbow crystal mountains and forests in the background, art by alayna danner, {suffix}"
+#     ]
+# ]
+
+# gc_tiles = [
+#     [None, 8.0, None, None, None],
+#     [None, None, 8.0, None, 6.0],
+# ]
+
+# seed_tiles = [
+#     [None, None, "RNG", None, None],
+#     [3582643549, None, None, None, None],
+# ]
+# seed_tiles_mode = [
+#     [StableDiffusionTilingPipeline.SeedTilesMode.EXCLUSIVE.value] * 5,
+#     [StableDiffusionTilingPipeline.SeedTilesMode.FULL.value] + [StableDiffusionTilingPipeline.SeedTilesMode.FULL.value] * 4,
+# ]
+
+# tile_height = 640
+# tile_width = 640
+# tile_row_overlap = 256
+# tile_col_overlap = 256
+# cpu_vae = True
+
+# suffix = "elegant, highly detailed, smooth, sharp focus, artstation, stunning masterpiece"
+# filler = f"a pathways and staircases floating in deep space, a constellation of stars and planets and black holes in the background, art by style of escher and patrick mcenvoy and michael komarck, {suffix}"
+# prompt = [
+#     [
+#         f"{filler}",
+#         f"An archway leading to a starry nigh, art by van gogh and patrick mcenvoy and michael komarck, {suffix}",
+#         f"{filler}",
+#         f"Pathways and staircases floating in deep space, a constellation of stars and planets and black holes in the background, art by kandinsky and picasso and miro and escher and patrick mcenvoy and michael komarck, {suffix}",
+#         f"{filler}",
+#     ],
+#     [
+#         #"An archway leading to a landscape of hell, art by Hieronymus Bosch, {suffix}",
+#         #"A rift in space showing a view of a massive tower of babel in the center of hell, in the style of Hieronymus Bosch, a constellation of stars and planets and black holes in the background, {suffix}",
+#         "A view from a cave of a landscape of hell, with lost souls wandering about, art by adrianus eversen, {suffix}",
+#         f"{filler}",
+#         "A hooded figure facing the camera, with tentacles instead of feet, holding a large golden intricate key, art by patrick mcenvoy and michael komarck, {suffix}",
+#         f"{filler}",
+#         f"A An archway leading to a meadow with dragons with rainbow crystal mountains and forests in the background, art by alayna danner, {suffix}"
+#     ]
+# ]
+
+# gc_tiles = [
+#     [None, 8.0, None, None, None],
+#     [None, None, 8.0, None, 6.0],
+# ]
+
+# seed_tiles = [
+#     [None, None, None, None, None],
+#     [3582643549, None, None, None, None],
+# ]
+
+# tile_height = 640
+# tile_width = 640
+# tile_row_overlap = 256
+# tile_col_overlap = 256
+# cpu_vae = True
+
+# suffix = "elegant, highly detailed, smooth, sharp focus, artstation, stunning masterpiece"
+# filler = f"a pathways and staircases floating in deep space, a constellation of stars and planets and black holes in the background, art by style of escher and patrick mcenvoy and michael komarck, {suffix}"
+# prompt = [
+#     [
+#         f"{filler}",
+#         f"An archway leading to a starry nigh, art by van gogh and patrick mcenvoy and michael komarck, {suffix}",
+#         f"{filler}",
+#         f"An archway leading to a nightmare world full of bloody eyes and jaws, art by Hans Ruedi Giger and patrick mcenvoy and michael komarck, {suffix}",
+#         f"{filler}",
+#     ],
+#     [
+#         #"An archway leading to a landscape of hell, art by Hieronymus Bosch, {suffix}",
+#         #"A rift in space showing a view of a massive tower of babel in the center of hell, in the style of Hieronymus Bosch, a constellation of stars and planets and black holes in the background, {suffix}",
+#         "A view from a cave of a landscape of hell, with lost souls wandering about, art by patrick mcenvoy and michael komarck and greg rutkowski, {suffix}",
+#         f"{filler}",
+#         "A hooded figure facing the camera, with tentacles instead of feet, holding a large golden intricate key, art by patrick mcenvoy and michael komarck, {suffix}",
+#         f"{filler}",
+#         f"A An archway leading to a meadow with dragons with rainbow crystal mountains and forests in the background, art by alayna danner, {suffix}"
+#     ]
+# ]
+
+# gc_tiles = [
+#     [None, 8.0, None, None, None],
+#     [None, None, 8.0, None, 6.0],
+# ]
+
+# seed_tiles = [
+#     [None, None, None, None, None],
+#     [3582643549, None, None, None, None],
+# ]
+
+# tile_height = 640
+# tile_width = 640
+# tile_row_overlap = 256
+# tile_col_overlap = 256
+# cpu_vae = True
 
 # suffix = "elegant, highly detailed, smooth, sharp focus, artstation, stunning masterpiece"
 # filler = f"a pathways and staircases floating in deep space, a constellation of stars and planets and black holes in the background, art by style of escher and patrick mcenvoy and michael komarck, {suffix}"
@@ -173,23 +390,37 @@ for _ in range(n):
     gc_image = gc if gc is not None else np.random.randint(5, 30)
     steps_image = steps if steps is not None else np.random.randint(50, 150)
     seed_image = seed if seed is not None else np.random.randint(9999999999)
+    seed_tiles_image = deepcopy(seed_tiles)
+    for row in range(len(seed_tiles)):
+        for col in range(len(seed_tiles[0])):
+            if seed_tiles[row][col] == "RNG":
+                seed_tiles_image[row][col] = np.random.randint(9999999999)
+    seed_reroll_regions_image = deepcopy(seed_reroll_regions)
+    for i in range(len(seed_reroll_regions)):
+        row_init, row_end, col_init, col_end, seed_reroll = seed_reroll_regions[i]
+        if seed_reroll == "RNG":
+            seed_reroll = np.random.randint(9999999999)
+        seed_reroll_regions_image[i] = (row_init, row_end, col_init, col_end, seed_reroll)
     pipeargs = {
         "guidance_scale": gc_image,
         "num_inference_steps": steps_image,
-        "generator": torch.Generator("cuda").manual_seed(seed_image),
+        "seed": seed_image,
         "prompt": prompt,
         "tile_height": tile_height, 
         "tile_width": tile_width, 
         "tile_row_overlap": tile_row_overlap, 
         "tile_col_overlap": tile_col_overlap,
         "guidance_scale_tiles": gc_tiles,
+        "seed_tiles": seed_tiles_image,
+        "seed_tiles_mode": seed_tiles_mode,
+        "seed_reroll_regions": seed_reroll_regions_image,
         "cpu_vae": cpu_vae,
     }
     image = pipe(**pipeargs)["sample"][0]
     ct = datetime.datetime.now()
     outname = f"{ct}_{prompt[0][0][0:100]}_{tile_height}x{tile_width}_sche{sche}_seed{seed_image}_gc{gc_image}_steps{steps_image}"
     image.save(f"outputs/{outname}.png")
-    with open(f"logs/{outname}.txt", "w") as f:
+    with open(f"logs/{outname}.json", "w") as f:
         json.dump(
             {
                 "prompt": prompt,
@@ -202,6 +433,9 @@ for _ in range(n):
                 "gc": gc_image,
                 "gc_tiles": gc_tiles,
                 "steps": steps_image,
+                "seed_tiles": seed_tiles_image,
+                "seed_tiles_mode": seed_tiles_mode,
+                "seed_reroll_regions": seed_reroll_regions_image,
                 "cpu_vae": cpu_vae,
                 "git_commit": git.Repo(search_parent_directories=True).head.object.hexsha,
             },

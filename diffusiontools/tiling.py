@@ -1,5 +1,7 @@
+from enum import Enum
 import inspect
-from typing import List, Optional, Union
+from ligo.segments import segment
+from typing import List, Optional, Tuple, Union
 
 import torch
 
@@ -38,19 +40,27 @@ class StableDiffusionTilingPipeline(DiffusionPipeline, StableDiffusionExtrasMixi
             feature_extractor=feature_extractor,
         )
 
+    class SeedTilesMode(Enum):
+        """Modes in which the latents of a particular tile can be re-seeded"""
+        FULL = "full"
+        EXCLUSIVE = "exclusive"
+
     @torch.no_grad()
     def __call__(
         self,
-        prompt: List[List[str]],
+        prompt: Union[str, List[List[str]]],
         num_inference_steps: Optional[int] = 50,
         guidance_scale: Optional[float] = 7.5,
         eta: Optional[float] = 0.0,
-        generator: Optional[torch.Generator] = None,
+        seed: Optional[int] = None,
         tile_height: Optional[int] = 512,
         tile_width: Optional[int] = 512,
         tile_row_overlap: Optional[int] = 256,
         tile_col_overlap: Optional[int] = 256,
         guidance_scale_tiles: Optional[List[List[float]]] = None,
+        seed_tiles: Optional[List[List[int]]] = None,
+        seed_tiles_mode: Optional[Union[str, List[List[str]]]] = "full",
+        seed_reroll_regions: Optional[List[Tuple[int, int, int, int, int]]] = None,
         cpu_vae: Optional[bool] = False,
     ):
 
@@ -60,6 +70,14 @@ class StableDiffusionTilingPipeline(DiffusionPipeline, StableDiffusionExtrasMixi
         grid_cols = len(prompt[0])
         if not all(len(row) == grid_cols for row in prompt):
             raise ValueError(f"All prompt rows must have the same number of prompt columns")
+        if not isinstance(seed_tiles_mode, str) and (not isinstance(seed_tiles_mode, list) or not all(isinstance(row, list) for row in seed_tiles_mode)):
+            raise ValueError(f"`seed_tiles_mode` has to be a string or list of lists but is {type(prompt)}")
+        if isinstance(seed_tiles_mode, str):
+            seed_tiles_mode = [[seed_tiles_mode for _ in range(len(row))] for row in prompt]
+        if any(mode not in (modes := [mode.value for mode in self.SeedTilesMode]) for row in seed_tiles_mode for mode in row):
+            raise ValueError(f"Seed tiles mode must be one of {modes}")
+        if seed_reroll_regions is None:
+            seed_reroll_regions = []
         batch_size = 1
 
         # set timesteps
@@ -74,7 +92,29 @@ class StableDiffusionTilingPipeline(DiffusionPipeline, StableDiffusionExtrasMixi
         height = tile_height + (grid_rows - 1) * (tile_height - tile_row_overlap)
         width = tile_width + (grid_cols - 1) * (tile_width - tile_col_overlap)
         latents_shape = (batch_size, self.unet.in_channels, height // 8, width // 8)
+        generator = torch.Generator("cuda").manual_seed(seed)
         latents = torch.randn(latents_shape, generator=generator, device=self.device)
+
+        # overwrite latents for specific tiles if provided
+        if seed_tiles is not None:
+            for row in range(grid_rows):
+                for col in range(grid_cols):
+                    if (seed_tile := seed_tiles[row][col]) is not None:
+                        mode = seed_tiles_mode[row][col]
+                        if mode == self.SeedTilesMode.FULL.value:
+                            row_init, row_end, col_init, col_end = _tile2latent_indices(row, col, tile_width, tile_height, tile_row_overlap, tile_col_overlap)
+                        else:
+                            row_init, row_end, col_init, col_end = _tile2latent_exclusive_indices(row, col, tile_width, tile_height, tile_row_overlap, tile_col_overlap, grid_rows, grid_cols)                            
+                        tile_generator = torch.Generator("cuda").manual_seed(seed_tile)
+                        tile_shape = (latents_shape[0], latents_shape[1], row_end - row_init, col_end - col_init)
+                        latents[:, :, row_init:row_end, col_init:col_end] = torch.randn(tile_shape, generator=tile_generator, device=self.device)
+
+        # overwrite again for seed reroll regions
+        for row_init, row_end, col_init, col_end, seed_reroll in seed_reroll_regions:
+            row_init, row_end, col_init, col_end = _pixel2latent_indices(row_init, row_end, col_init, col_end)  # to latent space coordinates
+            reroll_generator = torch.Generator("cuda").manual_seed(seed_reroll)
+            region_shape = (latents_shape[0], latents_shape[1], row_end - row_init, col_end - col_init)
+            latents[:, :, row_init:row_end, col_init:col_end] = torch.randn(region_shape, generator=reroll_generator, device=self.device)
 
         # set timesteps # FIXME: this is redundant with section above
         accepts_offset = "offset" in set(inspect.signature(self.scheduler.set_timesteps).parameters.keys())
@@ -223,6 +263,11 @@ def _tile2pixel_indices(tile_row, tile_col, tile_width, tile_height, tile_row_ov
     return px_row_init, px_row_end, px_col_init, px_col_end
 
 
+def _pixel2latent_indices(px_row_init, px_row_end, px_col_init, px_col_end):
+    """Translates coordinates in pixel space to coordinates in latent space"""
+    return px_row_init // 8, px_row_end // 8, px_col_init // 8, px_col_end // 8
+
+
 def _tile2latent_indices(tile_row, tile_col, tile_width, tile_height, tile_row_overlap, tile_col_overlap):
     """Given a tile row and column numbers returns the range of latents affected by that tiles in the overall image
     
@@ -233,4 +278,27 @@ def _tile2latent_indices(tile_row, tile_col, tile_width, tile_height, tile_row_o
         - Ending coordinates of columns in latent space
     """
     px_row_init, px_row_end, px_col_init, px_col_end = _tile2pixel_indices(tile_row, tile_col, tile_width, tile_height, tile_row_overlap, tile_col_overlap)
-    return px_row_init // 8, px_row_end // 8, px_col_init // 8, px_col_end // 8
+    return _pixel2latent_indices(px_row_init, px_row_end, px_col_init, px_col_end)
+
+
+def _tile2latent_exclusive_indices(tile_row, tile_col, tile_width, tile_height, tile_row_overlap, tile_col_overlap, rows, columns):
+    """Given a tile row and column numbers returns the range of latents affected only by that tile in the overall image
+    
+    Returns a tuple with:
+        - Starting coordinates of rows in latent space
+        - Ending coordinates of rows in latent space
+        - Starting coordinates of columns in latent space
+        - Ending coordinates of columns in latent space
+    """
+    row_init, row_end, col_init, col_end = _tile2latent_indices(tile_row, tile_col, tile_width, tile_height, tile_row_overlap, tile_col_overlap)
+    row_segment = segment(row_init, row_end)
+    col_segment = segment(col_init, col_end)
+    # Iterate over the rest of tiles, clipping the region for the current tile
+    for row in range(rows):
+        for column in range(columns):
+            if row != tile_row and column != tile_col:
+                clip_row_init, clip_row_end, clip_col_init, clip_col_end = _tile2latent_indices(row, column, tile_width, tile_height, tile_row_overlap, tile_col_overlap)
+                row_segment = row_segment - segment(clip_row_init, clip_row_end)
+                col_segment = col_segment - segment(clip_col_init, clip_col_end)
+    #return row_init, row_end, col_init, col_end
+    return row_segment[0], row_segment[1], col_segment[0], col_segment[1]

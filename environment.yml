@@ -5,4 +5,5 @@ dependencies:
     - diffusers==0.2.*
     - ftfy==6.1.*
     - gitpython==3.1.*
+    - ligo-segments==1.4.*
     - transformers==4.21.*

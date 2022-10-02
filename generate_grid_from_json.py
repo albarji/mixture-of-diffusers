@@ -20,7 +20,7 @@ def generate_grid(generation_arguments):
     pipeargs = {
         "guidance_scale": generation_arguments["gc"],
         "num_inference_steps": generation_arguments["steps"],
-        "generator": torch.Generator("cuda").manual_seed(generation_arguments["seed"]),
+        "seed": generation_arguments["seed"],
         "prompt": generation_arguments["prompt"],
         "tile_height": generation_arguments["tile_height"], 
         "tile_width": generation_arguments["tile_width"], 
@@ -29,9 +29,10 @@ def generate_grid(generation_arguments):
         "guidance_scale_tiles": generation_arguments["gc_tiles"],
         "cpu_vae": generation_arguments["cpu_vae"] if "cpu_vae" in generation_arguments else False,
     }
+    if "seed_tiles" in generation_arguments: pipeargs = {**pipeargs, "seed_tiles": generation_arguments["seed_tiles"]}
+    if "seed_tiles_mode" in generation_arguments: pipeargs = {**pipeargs, "seed_tiles_mode": generation_arguments["seed_tiles_mode"]}
+    if "seed_reroll_regions" in generation_arguments: pipeargs = {**pipeargs, "seed_reroll_regions": generation_arguments["seed_reroll_regions"]}
     image = pipe(**pipeargs)["sample"][0]
-    ct = datetime.datetime.now()
-    #outname = f"{ct}_{prompt[0][0][0:100]}_{tile_height}x{tile_width}_sche{sche}_seed{seed_image}_gc{gc_image}_steps{steps_image}"
     outname = "output"
     image.save(f"outputs/{outname}.png")
 
