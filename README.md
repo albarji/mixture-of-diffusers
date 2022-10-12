@@ -47,22 +47,7 @@ In the following example a grid of 10x1 tiles is configured to generate a forest
 
 ![gridExampleLabeled](https://user-images.githubusercontent.com/9654655/195371664-54d8a599-25d8-46ba-b823-3c7726ecb6ff.png)
 
-The `StableDiffusionTilingPipeline` is configured to use 10 prompts (from left to right):
-
-* "a forest, **ukiyo-e**, intricate, elegant, highly detailed, smooth, sharp focus, artstation, stunning masterpiece, impressive colors",
-* "a forest, **ukiyo-e**, intricate, elegant, highly detailed, smooth, sharp focus, artstation, stunning masterpiece, impressive colors",
-* "a forest, **by velazquez**, intricate, elegant, highly detailed, smooth, sharp focus, artstation, stunning masterpiece, impressive colors",
-* "a forest, **by velazquez**, intricate, elegant, highly detailed, smooth, sharp focus, artstation, stunning masterpiece, impressive colors",
-* "a forest, **impressionist style by van gogh**, intricate, elegant, highly detailed, smooth, sharp focus, artstation, stunning masterpiece, impressive colors",
-* "a forest, **impressionist style by van gogh**, intricate, elegant, highly detailed, smooth, sharp focus, artstation, stunning masterpiece, impressive colors",
-* "a forest, **cubist style by Pablo Picasso** intricate, elegant, highly detailed, smooth, sharp focus, artstation, stunning masterpiece, impressive colors",
-* "a forest, **cubist style by Pablo Picasso** intricate, elegant, highly detailed, smooth, sharp focus, artstation, stunning masterpiece, impressive colors",
-* "a forest, **80s synthwave style**, intricate, elegant, highly detailed, smooth, sharp focus, artstation, stunning masterpiece, impressive colors",
-* "a forest, **80s synthwave style**, intricate, elegant, highly detailed, smooth, sharp focus, artstation, stunning masterpiece, impressive colors"
-
-Each tile takes a shape of 768x512 pixels, and tiles overlap 256 pixels to avoid seam effects.
-
-The corresponding settings file for generating this image would be:
+The `StableDiffusionTilingPipeline` is configured to use 10 prompts with changing styles. Each tile takes a shape of 768x512 pixels, and tiles overlap 256 pixels to avoid seam effects. All the details are specified in a configuration file:
 
 ```json
 {
@@ -93,9 +78,13 @@ The corresponding settings file for generating this image would be:
 }
 ```
 
-and you can try it running `python generate_grid_from_json.py examples/linearForest.json`.
+You can try generating this image using this configuration file by running
 
-You can create your own settings files and use `generate_grid_from_json.py` to generate your image! Alternatively, you implement you own python script making use of the `StableDiffusionTilingPipeline`. You can find an example of such a script in `generate_grid.py`. The full list of arguments is:
+```
+python generate_grid_from_json.py examples/linearForest.json
+```
+
+To create your own images, edit your own configuration files and run `generate_grid_from_json.py`! Alternatively, you can implement you own python script making direct use of the `StableDiffusionTilingPipeline`. You can find an example of such a script in `generate_grid.py`. The full list of arguments is:
 
 * **prompt**: either a single string (no tiling) or a list of lists with all the prompts to use (one list for each row of tiles). This will also define the tiling structure.
 * **num_inference_steps**: number of diffusions steps.
