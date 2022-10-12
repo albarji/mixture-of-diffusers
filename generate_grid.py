@@ -8,52 +8,37 @@ import numpy as np
 from diffusiontools.tiling import StableDiffusionTilingPipeline
 
 ### CONFIG START
-n = 1
+n = 20
 sche = "lms"
 gc = 8
-seed = 4821955176
-steps = 100
+seed = None
+steps = 50
 
 suffix = "elegant, highly detailed, smooth, sharp focus, artstation, stunning masterpiece"
-filler = f"a pathways and staircases floating in deep space, a constellation of stars and planets and black holes in the background, art by style of escher and patrick mcenvoy and michael komarck, {suffix}"
 prompt = [
     [
-        f"{filler}",
-        f"An archway in the foreground, pathways and staircases floating in deep space, a constellation of stars and planets and black holes in the background, art by van gogh and patrick mcenvoy and michael komarck, {suffix}",
-        f"painting of truth of the universe, a colorful supernova exploding, a constellation of stars and planets and black holes in the background, a hooded figure facing the camera in the bottom, {suffix}",
-        f"An archway in the foreground, pathways and staircases floating in deep space, a constellation of stars and planets and black holes in the background, art by kandinsky and picasso and miro and escher and patrick mcenvoy and michael komarck, {suffix}",
-        f"{filler}",
-    ],
-    [
-        f"A magical portal leading to a citadel made of stone, art by adrianus eversen, twilight lighting, {suffix}",
-        f"{filler}",
-        f"A hooded figure facing the camera, with tentacles instead of feet, holding a large golden intricate key, art by patrick mcenvoy and michael komarck, {suffix}, robe with arcane symbols and runes",
-        f"{filler}",
-        f"A magical portal leading to a futuristic city with crystal skyscrappers and zeppelings in the background, art by alayna danner, {suffix}"
+        f"A charming house in the countryside, by jakub rozalski, sunset lighting, {suffix}",
+        f"A dirt road in the countryside crossing pastures, by jakub rozalski, sunset lighting, {suffix}",
+        f"An old and rusty giant robot lying on a dirt road, by jakub rozalski, dark sunset lighting, {suffix}"
     ]
 ]
 
 gc_tiles = [
-    [None, 8.0, None, None, None],
-    [None, None, 8.0, None, 6.0],
+    [None, None, None],
 ]
 
 seed_tiles = [
-    [None, None, None, None, None],
-    [9210074984, None, None, None, 9546803418],
+    [None, None, None],
 ]
 seed_tiles_mode = StableDiffusionTilingPipeline.SeedTilesMode.FULL.value
 
-seed_reroll_regions = [
-    (0, 366, 990, 1228, 8979961135),
-    (759, 1022, 1200, 1348, 2737442638)
-]
+seed_reroll_regions = []
 
 tile_height = 640
 tile_width = 640
 tile_row_overlap = 256
 tile_col_overlap = 256
-cpu_vae = True
+cpu_vae = False
 
 ### CONFIG END
 
