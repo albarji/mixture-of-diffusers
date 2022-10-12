@@ -25,7 +25,7 @@ Out of a sample of 20 Stable Diffusion generations with different seeds, the gen
   </tr>
 </table>
 
-The method proposed here strives to proved a better tool for image composition by using several diffusion processes in parallel, each configured with a specific prompt and settings, and focused on a particular region of the image. For example, the following are three outputs from this method, using the following prompts from left to right:
+The method proposed here strives to provide a better tool for image composition by using several diffusion processes in parallel, each configured with a specific prompt and settings, and focused on a particular region of the image. For example, the following are three outputs from this method, using the following prompts from left to right:
 
 * "**A charming house in the countryside, by jakub rozalski, sunset lighting**, elegant, highly detailed, smooth, sharp focus, artstation, stunning masterpiece"
 * "**A dirt road in the countryside crossing pastures, by jakub rozalski, sunset lighting**, elegant, highly detailed, smooth, sharp focus, artstation, stunning masterpiece"
@@ -100,6 +100,7 @@ You can create your own settings files and use `generate_grid_from_json.py` to g
 * **prompt**: either a single string (no tiling) or a list of lists with all the prompts to use (one list for each row of tiles). This will also define the tiling structure.
 * **num_inference_steps**: number of diffusions steps.
 * **guidance_scale**: classifier-free guidance.
+* **seed**: general random seed to initialize latents.
 * **tile_height**: height in pixels of each grid tile.
 * **tile_width**: width in pixels of each grid tile.
 * **tile_row_overlap**: number of overlap pixels between tiles in consecutive rows.
@@ -108,5 +109,20 @@ You can create your own settings files and use `generate_grid_from_json.py` to g
 * **guidance_scale_tiles**: specific weights for classifier-free guidance in each tile. If `None`, the value provided in `guidance_scale` will be used.
 * **seed_tiles**: specific seeds for the initialization latents in each tile. These will override the latents generated for the whole canvas using the standard `seed` parameter.
 * **seed_tiles_mode**: either `"full"` `"exclusive"`. If `"full"`, all the latents affected by the tile be overriden. If `"exclusive"`, only the latents that are affected exclusively by this tile (and no other tiles) will be overrriden.
-* **seed_reroll_regions**: a list of tuples in the form (start row, end row, start column, end column, seed) defining regions in pixel space for which the latents will be overriden using the given seed. Has priority over `seed_tiles`.
+* **seed_reroll_regions**: a list of tuples in the form (start row, end row, start column, end column, seed) defining regions in pixel space for which the latents will be overriden using the given seed. Takes priority over `seed_tiles`.
 * **cpu_vae**: the decoder from latent space to pixel space can require too mucho GPU RAM for large images. If you find out of memory errors at the end of the generation process, try setting this parameter to `True` to run the decoder in CPU. Slower, but should run without memory issues.
+
+## Technical details
+
+To initialize the generation process, the size of the canvas is computed based on the number of tile columns and rows selected, the tile size and tile overlapping. The corresponding size of the latent space is computed, and a matrix of latents is initialized using the provided seeds: first the general seed, then the specific tiles seeds (if provided) and finally the reroll regions seeds. The generation process then proceeds as follows:
+
+* Compute a mask of weights $M_t$ for every tile $t$. This mask follows a bidimensional gaussian distribution with mean at the tile center, and variance 0.01.
+* For each inference step $k$:
+    * Initialize the overall noise predictions $N$ as an all zeroes matrix.
+    * For each tile $t$:
+        * Let $X_t$ be the matrix of latents contained in tile $t$, and its prompt $p_t$
+        * Run the standard noise prediction procedure of the diffusion process at time $k$, but using only the latents $X_t$ and prompt $p_t$. Let $N_t$ be the obtained noise predictions.
+          * (that is, obtain noise predictions $N_t$ by running $X_t$ through the diffusion process U-net, with timestep $t$ and prompt $p_t$, and also without the prompt to compute classifier-free guidance)
+        * Add to the overall noise predictions $N$ the noise predictions $N_t$ multiplied by the tile mask $M_t$, at the positions corresponding with the location of the current tile $t$.
+    * Normalize $N$ by dividing each value by the sum of mask weights that contributed to that value.
+    * Run the standard diffusion model scheduler with the noise predictions $N$.
