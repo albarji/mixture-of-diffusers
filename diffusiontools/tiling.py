@@ -80,14 +80,6 @@ class StableDiffusionTilingPipeline(DiffusionPipeline, StableDiffusionExtrasMixi
             seed_reroll_regions = []
         batch_size = 1
 
-        # set timesteps
-        accepts_offset = "offset" in set(inspect.signature(self.scheduler.set_timesteps).parameters.keys())
-        extra_set_kwargs = {}
-        offset = 0
-        if accepts_offset:
-            offset = 1
-            extra_set_kwargs["offset"] = 1
-
         # create original noisy latents using the timesteps
         height = tile_height + (grid_rows - 1) * (tile_height - tile_row_overlap)
         width = tile_width + (grid_cols - 1) * (tile_width - tile_col_overlap)
@@ -116,15 +108,13 @@ class StableDiffusionTilingPipeline(DiffusionPipeline, StableDiffusionExtrasMixi
             region_shape = (latents_shape[0], latents_shape[1], row_end - row_init, col_end - col_init)
             latents[:, :, row_init:row_end, col_init:col_end] = torch.randn(region_shape, generator=reroll_generator, device=self.device)
 
-        # set timesteps # FIXME: this is redundant with section above
+        # Prepare scheduler
         accepts_offset = "offset" in set(inspect.signature(self.scheduler.set_timesteps).parameters.keys())
         extra_set_kwargs = {}
         if accepts_offset:
             extra_set_kwargs["offset"] = 1
-
         self.scheduler.set_timesteps(num_inference_steps, **extra_set_kwargs)
-
-        # if we use LMSDiscreteScheduler, let's make sure latents are mulitplied by sigmas
+        # if we use LMSDiscreteScheduler, let's make sure latents are multiplied by sigmas
         if isinstance(self.scheduler, LMSDiscreteScheduler):
             latents = latents * self.scheduler.sigmas[0]
 
