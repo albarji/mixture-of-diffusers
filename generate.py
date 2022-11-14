@@ -66,7 +66,7 @@ def generate_variations(prompt, height=512, width=512, seed=None, gc=None, steps
             pipeargs = {**pipeargs, "init_image": x0}
             if not mask_image:  # img2img
                 strength_image = init_strength if init_strength is not None else np.random.randint(20, 80) / 100.
-                pipeargs = {"strength": 1. - strength_image}
+                pipeargs = {**pipeargs, "strength": 1. - strength_image}
                 outname = outname + f"_initstr{strength_image}"
             else:  # inpainting
                 pipeargs = {**pipeargs, "mask_image": mask}
