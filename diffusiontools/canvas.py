@@ -1,3 +1,4 @@
+from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum
 import inspect
@@ -148,7 +149,7 @@ class MaskWeightsBuilder:
         return torch.tile(torch.tensor(weights), (self.nbatch, self.latent_space_dim, 1, 1))
         
 
-class StableDiffusionCanvasPipeline(DiffusionPipeline, StableDiffusionExtrasMixin):
+class StableDiffusionCanvasPipeline(DiffusionPipeline):
     """Stable Diffusion pipeline that mixes several diffusers in the same canvas"""
     def __init__(
         self,
@@ -161,7 +162,6 @@ class StableDiffusionCanvasPipeline(DiffusionPipeline, StableDiffusionExtrasMixi
         feature_extractor: CLIPFeatureExtractor,
     ):
         super().__init__()
-        scheduler = scheduler.set_format("pt")
         self.register_modules(
             vae=vae,
             text_encoder=text_encoder,
@@ -172,6 +172,27 @@ class StableDiffusionCanvasPipeline(DiffusionPipeline, StableDiffusionExtrasMixi
             feature_extractor=feature_extractor,
         )
 
+    def decode_latents(self, latents, cpu_vae=False):
+        """Decodes a given array of latents into pixel space"""
+        # scale and decode the image latents with vae
+        if cpu_vae:
+            lat = deepcopy(latents).cpu()
+            vae = deepcopy(self.vae).cpu()
+        else:
+            lat = latents
+            vae = self.vae
+
+        lat = 1 / 0.18215 * lat
+        image = vae.decode(lat).sample
+
+        image = (image / 2 + 0.5).clamp(0, 1)
+        image = image.cpu().permute(0, 2, 3, 1).numpy()
+
+        # TODO maybe add the latent upscaler by Rivers Have Wings: https://twitter.com/StabilityAI/status/1590531946026717186
+
+        return self.numpy_to_pil(image)
+
+
     @torch.no_grad()
     def __call__(
         self,
@@ -179,7 +200,6 @@ class StableDiffusionCanvasPipeline(DiffusionPipeline, StableDiffusionExtrasMixi
         canvas_width: int,
         regions: List[DiffusionRegion],
         num_inference_steps: Optional[int] = 50,
-        eta: Optional[float] = 0.0,
         seed: Optional[int] = None,
         seed_reroll_regions: Optional[List[Tuple[CanvasRegion, int]]] = None,
         cpu_vae: Optional[bool] = False,
@@ -192,29 +212,9 @@ class StableDiffusionCanvasPipeline(DiffusionPipeline, StableDiffusionExtrasMixi
         if decode_steps:
             steps_images = []
 
-        # Create original noisy latents using the timesteps
-        latents_shape = (batch_size, self.unet.in_channels, canvas_height // 8, canvas_width // 8)
-        generator = torch.Generator("cuda").manual_seed(seed)
-        init_noise = torch.randn(latents_shape, generator=generator, device=self.device)
-        latents = init_noise.clone()
-
-        # Overwrite latents in seed reroll regions
-        for region, seed_reroll in seed_reroll_regions:
-            reroll_generator = torch.Generator("cuda").manual_seed(seed_reroll)
-            region_shape = (latents_shape[0], latents_shape[1], region.latent_row_end - region.latent_row_init, region.latent_col_end - region.latent_col_init)
-            latents[:, :, region.latent_row_init:region.latent_row_end, region.latent_col_init:region.latent_col_end] = torch.randn(region_shape, generator=reroll_generator, device=self.device)
-
         # Prepare scheduler
-        accepts_offset = "offset" in set(inspect.signature(self.scheduler.set_timesteps).parameters.keys())
-        extra_set_kwargs = {}
-        offset = 0
-        if accepts_offset:
-            offset = 1
-            extra_set_kwargs["offset"] = 1
-        self.scheduler.set_timesteps(num_inference_steps, **extra_set_kwargs)
-        # if we use LMSDiscreteScheduler, let's make sure latents are multiplied by sigmas
-        if isinstance(self.scheduler, LMSDiscreteScheduler):
-            latents = latents * self.scheduler.sigmas[0]
+        self.scheduler.set_timesteps(num_inference_steps, device=self.device)
+        timesteps = self.scheduler.timesteps
 
         # Split diffusion regions by their kind
         text2image_regions = [region for region in regions if isinstance(region, Text2ImageRegion)]
@@ -224,6 +224,21 @@ class StableDiffusionCanvasPipeline(DiffusionPipeline, StableDiffusionExtrasMixi
         for region in text2image_regions:
             region.tokenize_prompt(self.tokenizer)
             region.encode_prompt(self.text_encoder, self.device)
+
+        # Create original noisy latents using the timesteps
+        latents_shape = (batch_size, self.unet.in_channels, canvas_height // 8, canvas_width // 8)
+        generator = torch.Generator("cuda").manual_seed(seed)
+        init_noise = torch.randn(latents_shape, generator=generator, device=self.device)
+
+        # Overwrite latents in seed reroll regions
+        for region, seed_reroll in seed_reroll_regions:
+            reroll_generator = torch.Generator("cuda").manual_seed(seed_reroll)
+            region_shape = (latents_shape[0], latents_shape[1], region.latent_row_end - region.latent_row_init, region.latent_col_end - region.latent_col_init)
+            init_noise[:, :, region.latent_row_init:region.latent_row_end, region.latent_col_init:region.latent_col_end] = torch.randn(region_shape, generator=reroll_generator, device=self.device)
+
+        # scale the initial noise by the standard deviation required by the scheduler
+        init_noise = init_noise * self.scheduler.init_noise_sigma
+        latents = init_noise.clone()
 
         # Get unconditional embeddings for classifier free guidance in text2image regions
         for region in text2image_regions:
@@ -242,15 +257,6 @@ class StableDiffusionCanvasPipeline(DiffusionPipeline, StableDiffusionExtrasMixi
         for region in image2image_regions:
             region.encode_reference_image(self.vae, device=self.device)
 
-        # prepare extra kwargs for the scheduler step, since not all schedulers have the same signature
-        # eta (η) is only used with the DDIMScheduler, it will be ignored for other schedulers.
-        # eta corresponds to η in DDIM paper: https://arxiv.org/abs/2010.02502
-        # and should be between [0, 1]
-        accepts_eta = "eta" in set(inspect.signature(self.scheduler.step).parameters.keys())
-        extra_step_kwargs = {}
-        if accepts_eta:
-            extra_step_kwargs["eta"] = eta
-
         # Prepare mask of weights for each region
         mask_builder = MaskWeightsBuilder(latent_space_dim=self.unet.in_channels, nbatch=batch_size)
         mask_weights = [mask_builder.compute_mask_weights(region).to(self.device) for region in text2image_regions]
@@ -258,7 +264,7 @@ class StableDiffusionCanvasPipeline(DiffusionPipeline, StableDiffusionExtrasMixi
         # Diffusion timesteps
         for i, t in tqdm(enumerate(self.scheduler.timesteps)):
             # Image2Image regions
-            print(f"LATENTS BEFORE IMG2IMG: {latents[0, 0, :3, :3]}")
+            # print(f"LATENTS BEFORE IMG2IMG: {latents[0, 0, :3, :3]}")
             for region in image2image_regions:
                 influence_step = int(num_inference_steps * region.strength) + offset
                 influence_step = min(influence_step, num_inference_steps)
@@ -273,7 +279,7 @@ class StableDiffusionCanvasPipeline(DiffusionPipeline, StableDiffusionExtrasMixi
                 #     timesteps = torch.tensor([int(t)] * batch_size, dtype=torch.long)
                 #     region_latents = self.scheduler.add_noise(region.reference_latents, init_latents, timesteps)
                 #     latents[:, :, region.latent_row_init:region.latent_row_end, region.latent_col_init:region.latent_col_end] = region_latents
-            print(f"LATENTS AFTER IMG2IMG: {latents[0, 0, :3, :3]}")
+            # print(f"LATENTS AFTER IMG2IMG: {latents[0, 0, :3, :3]}")
 
             # Diffuse each region            
             noise_preds_regions = []
@@ -283,16 +289,13 @@ class StableDiffusionCanvasPipeline(DiffusionPipeline, StableDiffusionExtrasMixi
                 region_latents = latents[:, :, region.latent_row_init:region.latent_row_end, region.latent_col_init:region.latent_col_end]
                 # expand the latents if we are doing classifier free guidance
                 latent_model_input = torch.cat([region_latents] * 2)
-                if isinstance(self.scheduler, LMSDiscreteScheduler):
-                    sigma = self.scheduler.sigmas[i]
-                    # the model input needs to be scaled to match the continuous ODE formulation in K-LMS
-                    latent_model_input = latent_model_input / ((sigma**2 + 1) ** 0.5)
+                # scale model input following scheduler rules
+                latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
                 # predict the noise residual
                 noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=region.encoded_prompt)["sample"]
                 # perform guidance
                 noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-                guidance = region.guidance_scale
-                noise_pred_region = noise_pred_uncond + guidance * (noise_pred_text - noise_pred_uncond)
+                noise_pred_region = noise_pred_uncond + region.guidance_scale * (noise_pred_text - noise_pred_uncond)
                 noise_preds_regions.append(noise_pred_region)
                 
             # Merge noise predictions for all tiles
@@ -307,10 +310,7 @@ class StableDiffusionCanvasPipeline(DiffusionPipeline, StableDiffusionExtrasMixi
             noise_pred = torch.nan_to_num(noise_pred)  # Replace NaNs by zeros: NaN can appear if a position is not covered by any DiffusionRegion
 
             # compute the previous noisy sample x_t -> x_t-1
-            if isinstance(self.scheduler, LMSDiscreteScheduler):
-                latents = self.scheduler.step(noise_pred, i, latents, **extra_step_kwargs)["prev_sample"]
-            else:
-                latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs)["prev_sample"]
+            latents = self.scheduler.step(noise_pred, t, latents).prev_sample
 
             # Apply image2image regions
             # TODO this doesn't work so well, but adding the gradient as diffusion noise also doesn't work. Try using initialization of latents

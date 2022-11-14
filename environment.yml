@@ -2,7 +2,7 @@ name: stable_diffusion
 dependencies:
   - pip=22.1.*
   - pip
-    - diffusers==0.2.*
+    - diffusers[torch]==0.7.*
     - ftfy==6.1.*
     - gitpython==3.1.*
     - ligo-segments==1.4.*

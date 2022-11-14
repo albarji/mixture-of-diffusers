@@ -1,5 +1,6 @@
 from copy import deepcopy
 
+# TODO: useless now?
 class StableDiffusionExtrasMixin:
     """Mixin providing additional convenience method to Stable Diffusion pipelines"""
 
