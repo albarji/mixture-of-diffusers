@@ -29,7 +29,6 @@ class StableDiffusionTilingPipeline(DiffusionPipeline, StableDiffusionExtrasMixi
         feature_extractor: CLIPFeatureExtractor,
     ):
         super().__init__()
-        scheduler = scheduler.set_format("pt")
         self.register_modules(
             vae=vae,
             text_encoder=text_encoder,
@@ -182,10 +181,7 @@ class StableDiffusionTilingPipeline(DiffusionPipeline, StableDiffusionExtrasMixi
                     tile_latents = latents[:, :, px_row_init:px_row_end, px_col_init:px_col_end]
                     # expand the latents if we are doing classifier free guidance
                     latent_model_input = torch.cat([tile_latents] * 2) if do_classifier_free_guidance else tile_latents
-                    if isinstance(self.scheduler, LMSDiscreteScheduler):
-                        sigma = self.scheduler.sigmas[i]
-                        # the model input needs to be scaled to match the continuous ODE formulation in K-LMS
-                        latent_model_input = latent_model_input / ((sigma**2 + 1) ** 0.5)
+                    latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
                     # predict the noise residual
                     noise_pred = self.unet(latent_model_input, t, encoder_hidden_states=text_embeddings[row][col])["sample"]
                     # perform guidance
