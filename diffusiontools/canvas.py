@@ -1,11 +1,10 @@
 from copy import deepcopy
 from dataclasses import dataclass
 from enum import Enum
-import inspect
 import numpy as np
 from numpy import pi, exp, sqrt
 import torch
-from torchvision.transforms.functional import resize  # TODO:  torchvision=0.14.0
+from torchvision.transforms.functional import resize
 from tqdm.auto import tqdm
 from transformers import CLIPFeatureExtractor, CLIPTextModel, CLIPTokenizer
 from typing import List, Optional, Tuple, Union
@@ -14,8 +13,6 @@ from diffusers.models import AutoencoderKL, UNet2DConditionModel
 from diffusers.pipeline_utils import DiffusionPipeline
 from diffusers.schedulers import DDIMScheduler, PNDMScheduler
 from diffusers.pipelines.stable_diffusion import StableDiffusionSafetyChecker
-
-from diffusiontools.extrasmixin import StableDiffusionExtrasMixin
 
 
 class MaskModes(Enum):

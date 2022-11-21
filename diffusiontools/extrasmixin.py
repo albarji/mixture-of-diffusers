@@ -1,6 +1,6 @@
 from copy import deepcopy
 
-# TODO: useless now?
+# TODO: remove after adaptaing tiling to use canvas
 class StableDiffusionExtrasMixin:
     """Mixin providing additional convenience method to Stable Diffusion pipelines"""
 
@@ -15,7 +15,7 @@ class StableDiffusionExtrasMixin:
             vae = self.vae
 
         lat = 1 / 0.18215 * lat
-        image = vae.decode(lat)
+        image = vae.decode(lat).sample
 
         image = (image / 2 + 0.5).clamp(0, 1)
         image = image.cpu().permute(0, 2, 3, 1).numpy()

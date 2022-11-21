@@ -4,6 +4,10 @@
 
 This repository holds various scripts and tools implementing a method for integrating a mixture of different diffusion processes collaborating to generate a single image. Each diffuser focuses on a particular region on the image, taking into account boundary effects to promote a smooth blending.
 
+## WARNING
+
+This develop version is currently unstable. Please use the [latest tag](https://github.com/albarji/mixture-of-diffusers/tree/0.1.0) instead.
+
 ## Explanation
 
 Current image generation methods, such as Stable Diffusion, struggle to position objects at specific locations. While the content of the generated image (somewhat) reflects the objects present in the prompt, it is difficult to frame the prompt in a way that creates an specific composition. For instance, take a prompt expressing a complex composition such as
@@ -41,7 +45,7 @@ Using several diffusion processes in parallel has also practical advantages when
 
 ## Usage
 
-This repository provides a new pipeline `StableDiffusionTilingPipeline` that extends the standard Stable Diffusion pipeline from [Diffusers](https://github.com/huggingface/diffusers). It features new options that allow defining the mixture of diffusers, which are distributed as a bidimensional grid over the image to be generated.
+This repository provides a new pipeline `StableDiffusionCanvasPipeline` that extends the standard Stable Diffusion pipeline from [Diffusers](https://github.com/huggingface/diffusers). It features new options that allow defining the mixture of diffusers, which are distributed as a number of "diffusion regions" over the image to be generated.
 
 In the following example a grid of 10x1 tiles is configured to generate a forest in changing styles:
 
