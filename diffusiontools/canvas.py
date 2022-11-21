@@ -55,7 +55,7 @@ class CanvasRegion:
 @dataclass
 class DiffusionRegion(CanvasRegion):
     """Abstract class defining a region where a diffusion process is acting"""
-    mask_type: MaskModes  # Kind of mask applied to this region
+    mask_type: MaskModes  # Kind of mask applied to this region  # TODO: find use for masks in Image2Image regions
     mask_weight: float = 1.0  # Strength of the mask
 
 
@@ -82,7 +82,7 @@ class Text2ImageRegion(DiffusionRegion):
 class Image2ImageRegion(DiffusionRegion):
     """Class defining a region where an image guided diffusion process is acting"""
     reference_image: torch.FloatTensor = None
-    strength: float = 0.8
+    strength: float = 0.8  # Strength of the image
 
     def __post_init__(self):
         super().__post_init__()
@@ -93,9 +93,11 @@ class Image2ImageRegion(DiffusionRegion):
         # Rescale image to region shape
         self.reference_image = resize(self.reference_image, size=[self.height, self.width])
 
-    def encode_reference_image(self, encoder, device):
+    def encode_reference_image(self, encoder, device, generator):
         """Encodes the reference image for this Image2Image region into the latent space"""
-        self.reference_latents = encoder.encode(self.reference_image.to(device)).sample()
+        self.reference_latents = encoder.encode(self.reference_image.to(device)).latent_dist.sample(generator=generator)
+        self.reference_latents = 0.18215 * self.reference_latents
+        # TODO: this requires more work, check https://github.com/huggingface/diffusers/blob/main/src/diffusers/pipelines/stable_diffusion/pipeline_stable_diffusion_img2img.py#L385
 
 
 @dataclass
@@ -192,6 +194,17 @@ class StableDiffusionCanvasPipeline(DiffusionPipeline):
 
         return self.numpy_to_pil(image)
 
+    def get_latest_timestep_img2img(self, num_inference_steps, strength):
+        """Finds the latest timesteps where an img2img strength does not impose latents anymore"""
+        # get the original timestep using init_timestep
+        offset = self.scheduler.config.get("steps_offset", 0)
+        init_timestep = int(num_inference_steps * (1 - strength)) + offset
+        init_timestep = min(init_timestep, num_inference_steps)
+
+        t_start = max(num_inference_steps - init_timestep + offset, 0)
+        latest_timestep = self.scheduler.timesteps[t_start]
+
+        return latest_timestep
 
     @torch.no_grad()
     def __call__(
@@ -214,7 +227,6 @@ class StableDiffusionCanvasPipeline(DiffusionPipeline):
 
         # Prepare scheduler
         self.scheduler.set_timesteps(num_inference_steps, device=self.device)
-        timesteps = self.scheduler.timesteps
 
         # Split diffusion regions by their kind
         text2image_regions = [region for region in regions if isinstance(region, Text2ImageRegion)]
@@ -237,8 +249,7 @@ class StableDiffusionCanvasPipeline(DiffusionPipeline):
             init_noise[:, :, region.latent_row_init:region.latent_row_end, region.latent_col_init:region.latent_col_end] = torch.randn(region_shape, generator=reroll_generator, device=self.device)
 
         # scale the initial noise by the standard deviation required by the scheduler
-        init_noise = init_noise * self.scheduler.init_noise_sigma
-        latents = init_noise.clone()
+        latents = init_noise * self.scheduler.init_noise_sigma
 
         # Get unconditional embeddings for classifier free guidance in text2image regions
         for region in text2image_regions:
@@ -255,7 +266,7 @@ class StableDiffusionCanvasPipeline(DiffusionPipeline):
 
         # Prepare image latents
         for region in image2image_regions:
-            region.encode_reference_image(self.vae, device=self.device)
+            region.encode_reference_image(self.vae, device=self.device, generator=generator)
 
         # Prepare mask of weights for each region
         mask_builder = MaskWeightsBuilder(latent_space_dim=self.unet.in_channels, nbatch=batch_size)
@@ -263,24 +274,6 @@ class StableDiffusionCanvasPipeline(DiffusionPipeline):
 
         # Diffusion timesteps
         for i, t in tqdm(enumerate(self.scheduler.timesteps)):
-            # Image2Image regions
-            # print(f"LATENTS BEFORE IMG2IMG: {latents[0, 0, :3, :3]}")
-            for region in image2image_regions:
-                influence_step = int(num_inference_steps * region.strength) + offset
-                influence_step = min(influence_step, num_inference_steps)
-                if i < influence_step:
-                    timesteps = torch.tensor([int(t)] * batch_size, dtype=torch.long)
-                    region_init_noise = init_noise[:, :, region.latent_row_init:region.latent_row_end, region.latent_col_init:region.latent_col_end]
-                    # TODO kind of works with DDIMScheduler, but not with LMSDiscreteScheduler. Should updated to latest version of diffusers, which has more coherency among schedulers
-                    region_latents = self.scheduler.add_noise(region.reference_latents, region_init_noise, timesteps)
-                    latents[:, :, region.latent_row_init:region.latent_row_end, region.latent_col_init:region.latent_col_end] = region_latents
-                # if True:  # FIXME: trying only with init
-                #     #latents[:, :, region.latent_row_init:region.latent_row_end, region.latent_col_init:region.latent_col_end] = region.reference_latents
-                #     timesteps = torch.tensor([int(t)] * batch_size, dtype=torch.long)
-                #     region_latents = self.scheduler.add_noise(region.reference_latents, init_latents, timesteps)
-                #     latents[:, :, region.latent_row_init:region.latent_row_end, region.latent_col_init:region.latent_col_end] = region_latents
-            # print(f"LATENTS AFTER IMG2IMG: {latents[0, 0, :3, :3]}")
-
             # Diffuse each region            
             noise_preds_regions = []
 
@@ -311,6 +304,22 @@ class StableDiffusionCanvasPipeline(DiffusionPipeline):
 
             # compute the previous noisy sample x_t -> x_t-1
             latents = self.scheduler.step(noise_pred, t, latents).prev_sample
+
+            # Image2Image regions
+            # print(f"LATENTS BEFORE IMG2IMG: {latents[0, 0, :3, :3]}")
+            for region in image2image_regions:
+                influence_step = self.get_latest_timestep_img2img(num_inference_steps, region.strength)
+                if t > influence_step:
+                    timestep = t.repeat(batch_size)
+                    region_init_noise = init_noise[:, :, region.latent_row_init:region.latent_row_end, region.latent_col_init:region.latent_col_end]
+                    region_latents = self.scheduler.add_noise(region.reference_latents, region_init_noise, timestep)
+                    latents[:, :, region.latent_row_init:region.latent_row_end, region.latent_col_init:region.latent_col_end] = region_latents
+                # if True:  # FIXME: trying only with init
+                #     #latents[:, :, region.latent_row_init:region.latent_row_end, region.latent_col_init:region.latent_col_end] = region.reference_latents
+                #     timesteps = torch.tensor([int(t)] * batch_size, dtype=torch.long)
+                #     region_latents = self.scheduler.add_noise(region.reference_latents, init_latents, timesteps)
+                #     latents[:, :, region.latent_row_init:region.latent_row_end, region.latent_col_init:region.latent_col_end] = region_latents
+            # print(f"LATENTS AFTER IMG2IMG: {latents[0, 0, :3, :3]}")
 
             # Apply image2image regions
             # TODO this doesn't work so well, but adding the gradient as diffusion noise also doesn't work. Try using initialization of latents
