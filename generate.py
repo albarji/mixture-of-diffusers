@@ -74,7 +74,7 @@ def generate_variations(prompt, height=512, width=512, seed=None, gc=None, steps
                     outname = outname + f"_smooth{mask_smoothing}"
         else:
             pipeargs = {**pipeargs, "height": height, "width": width}
-        image = pipe(**pipeargs)["sample"][0]
+        image = pipe(**pipeargs).images[0]
         image.save(f"{outname}.png")
         generated_images.append(image)
 

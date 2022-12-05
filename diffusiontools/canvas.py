@@ -33,9 +33,9 @@ class CanvasRegion:
     def __post_init__(self):
         # Compute coordinates for this region in latent space
         self.latent_row_init = self.row_init // 8
-        self.latent_row_end = self.row_end // 8
+        self.latent_row_end = self.latent_row_init + (self.row_end - self.row_init) // 8  # Row end might not be self.row_end // 8 if the number of rows is not a multiple of 8, hence this calculation
         self.latent_col_init = self.col_init // 8
-        self.latent_col_end = self.col_end // 8
+        self.latent_col_end = self.latent_col_init + (self.col_end - self.col_init) // 8
 
     @property
     def width(self):
@@ -193,7 +193,7 @@ class StableDiffusionCanvasPipeline(DiffusionPipeline):
         init_timestep = int(num_inference_steps * (1 - strength)) + offset
         init_timestep = min(init_timestep, num_inference_steps)
 
-        t_start = max(num_inference_steps - init_timestep + offset, 0)
+        t_start = min(max(num_inference_steps - init_timestep + offset, 0), num_inference_steps-1)
         latest_timestep = self.scheduler.timesteps[t_start]
 
         return latest_timestep
