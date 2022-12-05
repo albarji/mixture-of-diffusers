@@ -1,8 +1,9 @@
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from enum import Enum
 import numpy as np
 from numpy import pi, exp, sqrt
+import re
 import torch
 from torchvision.transforms.functional import resize
 from tqdm.auto import tqdm
@@ -45,6 +46,10 @@ class CanvasRegion:
     def height(self):
         return self.row_end - self.row_init
 
+    @property
+    def __dict__(self):
+        return asdict(self)
+
 
 @dataclass
 class DiffusionRegion(CanvasRegion):
@@ -57,9 +62,17 @@ class DiffusionRegion(CanvasRegion):
 class Text2ImageRegion(DiffusionRegion):
     """Class defining a region where a text guided diffusion process is acting"""
     prompt: str = ""  # Text prompt guiding the diffuser in this region
-    guidance_scale: float = 7.5  # Guidance scale of the diffuser in this region
+    guidance_scale: float = 7.5  # Guidance scale of the diffuser in this region. If None, randomize
     tokenized_prompt = None  # Tokenized prompt
     encoded_prompt = None  # Encoded prompt
+
+    def __post_init__(self):
+        super().__post_init__()
+        # Randomize arguments if given as None
+        if self.guidance_scale is None:
+            self.guidance_scale = np.random.randint(5, 30)
+        # Clean prompt
+        self.prompt = re.sub(' +', ' ', self.prompt).replace("\n", " ")
 
     def tokenize_prompt(self, tokenizer):
         """Tokenizes the prompt for this diffusion region using a given tokenizer"""
@@ -90,6 +103,19 @@ class Image2ImageRegion(DiffusionRegion):
         """Encodes the reference image for this Image2Image region into the latent space"""
         self.reference_latents = encoder.encode(self.reference_image.to(device)).latent_dist.sample(generator=generator)
         self.reference_latents = 0.18215 * self.reference_latents
+
+    @property
+    def __dict__(self):
+        # This class requires special casting to dict because of the reference_image tensor. Otherwise it cannot be casted to JSON
+
+        # Get all basic fields from parent class
+        super_fields = {key: getattr(self, key) for key in DiffusionRegion.__dataclass_fields__.keys()}
+        # Pack other fields
+        return {
+            **super_fields,
+            "reference_image": self.reference_image.cpu().tolist(),
+            "strength": self.strength
+        }
 
 
 @dataclass
