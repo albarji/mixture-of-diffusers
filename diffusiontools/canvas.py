@@ -23,6 +23,12 @@ class MaskModes(Enum):
     QUARTIC = "quartic"  # See https://en.wikipedia.org/wiki/Kernel_(statistics)
 
 
+class RerollModes(Enum):
+    """Modes in which the reroll regions operate"""
+    RESET = "reset"  # Completely reset the random noise in the region
+    EPSILON = "epsilon"  # Alter slightly the latents in the region
+
+
 @dataclass
 class CanvasRegion:
     """Class defining a rectangular region in the canvas"""
@@ -30,13 +36,20 @@ class CanvasRegion:
     row_end: int  # Region end row in pixel space (not included)
     col_init: int  # Region starting column in pixel space (included)
     col_end: int  # Region end column in pixel space (not included)
+    region_seed: int = None  # Seed for random operations in this region
+    noise_eps: float = 0.0  # Deviation of a zero-mean gaussian noise to be applied over the latents in this region. Useful for slightly "rerolling" latents
 
     def __post_init__(self):
+        # Initialize arguments if not specified
+        if self.region_seed is None:
+            self.region_seed = np.random.randint(9999999999)
         # Compute coordinates for this region in latent space
         self.latent_row_init = self.row_init // 8
         self.latent_row_end = self.latent_row_init + (self.row_end - self.row_init) // 8  # Row end might not be self.row_end // 8 if the number of rows is not a multiple of 8, hence this calculation
         self.latent_col_init = self.col_init // 8
         self.latent_col_end = self.latent_col_init + (self.col_end - self.col_init) // 8
+        # Initialize region generator
+        self.region_generator = torch.Generator("cuda").manual_seed(self.region_seed)
 
     @property
     def width(self):
@@ -54,8 +67,14 @@ class CanvasRegion:
 @dataclass
 class DiffusionRegion(CanvasRegion):
     """Abstract class defining a region where a diffusion process is acting"""
-    mask_type: MaskModes  # Kind of mask applied to this region  # TODO: masks are not used in Image2Image regions
+    mask_type: MaskModes = MaskModes.CONSTANT.value  # Kind of mask applied to this region  # TODO: masks are not used in Image2Image regions
     mask_weight: float = 1.0  # Strength of the mask
+
+
+@dataclass
+class RerollRegion(CanvasRegion):
+    """Class defining a rectangular canvas region in which initial latent noise will be rerolled"""
+    reroll_mode: RerollModes = RerollModes.RESET.value
 
 
 @dataclass
@@ -232,12 +251,12 @@ class StableDiffusionCanvasPipeline(DiffusionPipeline):
         regions: List[DiffusionRegion],
         num_inference_steps: Optional[int] = 50,
         seed: Optional[int] = None,
-        seed_reroll_regions: Optional[List[Tuple[CanvasRegion, int]]] = None,
+        reroll_regions: Optional[List[RerollRegion]] = None,
         cpu_vae: Optional[bool] = False,
         decode_steps: Optional[bool] = False
     ):
-        if seed_reroll_regions is None:
-            seed_reroll_regions = []
+        if reroll_regions is None:
+            reroll_regions = []
         batch_size = 1
 
         if decode_steps:
@@ -260,11 +279,19 @@ class StableDiffusionCanvasPipeline(DiffusionPipeline):
         generator = torch.Generator("cuda").manual_seed(seed)
         init_noise = torch.randn(latents_shape, generator=generator, device=self.device)
 
-        # Overwrite latents in seed reroll regions
-        for region, seed_reroll in seed_reroll_regions:
-            reroll_generator = torch.Generator("cuda").manual_seed(seed_reroll)
-            region_shape = (latents_shape[0], latents_shape[1], region.latent_row_end - region.latent_row_init, region.latent_col_end - region.latent_col_init)
-            init_noise[:, :, region.latent_row_init:region.latent_row_end, region.latent_col_init:region.latent_col_end] = torch.randn(region_shape, generator=reroll_generator, device=self.device)
+        # Reset latents in seed reroll regions, if requested
+        for region in reroll_regions:
+            if region.reroll_mode == RerollModes.RESET.value:
+                region_shape = (latents_shape[0], latents_shape[1], region.latent_row_end - region.latent_row_init, region.latent_col_end - region.latent_col_init)
+                init_noise[:, :, region.latent_row_init:region.latent_row_end, region.latent_col_init:region.latent_col_end] = torch.randn(region_shape, generator=region.region_generator, device=self.device)
+
+        # Apply epsilon noise to regions: first diffusion regions, then reroll regions
+        all_eps_rerolls = regions + [r for r in reroll_regions if r.reroll_mode == RerollModes.EPSILON.value]
+        for region in all_eps_rerolls:
+            if region.noise_eps > 0:
+                region_noise = init_noise[:, :, region.latent_row_init:region.latent_row_end, region.latent_col_init:region.latent_col_end]
+                eps_noise = torch.randn(region_noise.shape, generator=region.region_generator, device=self.device) * region.noise_eps
+                init_noise[:, :, region.latent_row_init:region.latent_row_end, region.latent_col_init:region.latent_col_end] += eps_noise
 
         # scale the initial noise by the standard deviation required by the scheduler
         latents = init_noise * self.scheduler.init_noise_sigma
