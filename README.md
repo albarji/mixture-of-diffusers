@@ -120,8 +120,14 @@ To initialize the generation process, the size of the canvas is computed based o
     * Normalize $N$ by dividing each value by the sum of mask weights that contributed to that value.
     * Run the standard diffusion model scheduler with the noise predictions $N$.
 
+## Citing
+
+Paper in progress!
+
 ## Acknowledgements
 
 First and foremost, my most sincere appreciation for the [Stable Diffusion team](https://stability.ai/blog/stable-diffusion-public-release) for releasing such an awesome model, and for letting me take part of the closed beta. Kudos also to the Hugging Face community and developers for implementing the [Diffusers library](https://github.com/huggingface/diffusers).
+
+Thanks to Instituto de Ingeniería del Conocimiento and Grupo de Aprendizaje Automático (Universidad Autónoma de Madrid) for providing GPU resources for testing and experimenting this library.
 
 Thanks also to the vibrant communities of the Stable Diffusion discord channel and [Lexica](https://lexica.art/), where I have learned about many amazing artists and styles. And to my friend Abril for sharing many tips on cool artists!
