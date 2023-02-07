@@ -122,7 +122,9 @@ To initialize the generation process, the size of the canvas is computed based o
 
 ## Citing
 
-Paper in progress!
+If you find this repository useful, please be so kind to cite the corresponding paper:
+
+> Álvaro Barbero Jiménez. Mixture of Diffusers for scene composition and high resolution image generation. https://arxiv.org/abs/2302.02412
 
 ## Acknowledgements
 
