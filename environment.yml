@@ -2,6 +2,7 @@ name: mixture_of_diffusers
 dependencies:
   - pip=22.1.*
   - pip:
+    - scipy==1.10.*
     - diffusers[torch]==0.7.*
     - ftfy==6.1.*
     - gitpython==3.1.*
