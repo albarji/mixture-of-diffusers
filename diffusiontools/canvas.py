@@ -97,7 +97,7 @@ class Text2ImageRegion(DiffusionRegion):
     guidance_scale: float = 7.5  # Guidance scale of the diffuser in this region. If None, randomize
     tokenized_prompt = None  # Tokenized prompt
     encoded_prompt = None  # Encoded prompt
-    mask_type: MaskModes = MaskModes.CONSTANT.value  # Kind of weight mask applied to this region
+    mask_type: MaskModes = MaskModes.GAUSSIAN.value  # Kind of weight mask applied to this region
     mask_weight: float = 1.0  # Global weights multiplier of the mask
 
     def __post_init__(self):

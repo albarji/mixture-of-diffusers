@@ -75,7 +75,7 @@ def test_create_text2image_region_unknown_mask():
 
 @pytest.fixture(scope="session")
 def base_image():
-    return preprocess_image(Image.open("tests/test_resources/IIC.png").convert("RGB"))
+    return preprocess_image(Image.open("examples/IIC.png").convert("RGB"))
 
 @pytest.mark.parametrize("region_params", [
     {"row_init": 0, "row_end": 512, "col_init": 0, "col_end": 512},
