@@ -80,9 +80,8 @@ class CanvasRegion:
 
 @dataclass
 class DiffusionRegion(CanvasRegion):
-    """Abstract class defining a region where a diffusion process is acting"""
-    mask_type: MaskModes = MaskModes.CONSTANT.value  # Kind of mask applied to this region  # TODO: masks are not used in Image2Image regions, move this to Text2ImageRegion
-    mask_weight: float = 1.0  # Strength of the mask
+    """Abstract class defining a region where some class of diffusion process is acting"""
+    pass
 
 
 @dataclass
@@ -98,6 +97,8 @@ class Text2ImageRegion(DiffusionRegion):
     guidance_scale: float = 7.5  # Guidance scale of the diffuser in this region. If None, randomize
     tokenized_prompt = None  # Tokenized prompt
     encoded_prompt = None  # Encoded prompt
+    mask_type: MaskModes = MaskModes.CONSTANT.value  # Kind of weight mask applied to this region
+    mask_weight: float = 1.0  # Global weights multiplier of the mask
 
     def __post_init__(self):
         super().__post_init__()
