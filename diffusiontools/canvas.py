@@ -95,10 +95,10 @@ class Text2ImageRegion(DiffusionRegion):
     """Class defining a region where a text guided diffusion process is acting"""
     prompt: str = ""  # Text prompt guiding the diffuser in this region
     guidance_scale: float = 7.5  # Guidance scale of the diffuser in this region. If None, randomize
-    tokenized_prompt = None  # Tokenized prompt
-    encoded_prompt = None  # Encoded prompt
     mask_type: MaskModes = MaskModes.GAUSSIAN.value  # Kind of weight mask applied to this region
     mask_weight: float = 1.0  # Global weights multiplier of the mask
+    tokenized_prompt = None  # Tokenized prompt
+    encoded_prompt = None  # Encoded prompt
 
     def __post_init__(self):
         super().__post_init__()

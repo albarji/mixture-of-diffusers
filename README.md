@@ -123,35 +123,33 @@ python generate_grid_from_json.py examples/linearForest.json
 
 The full list of arguments to a `StableDiffusionTilingPipeline` is:
 
-* **prompt**: either a single string (no tiling) or a list of lists with all the prompts to use (one list for each row of tiles). This will also define the tiling structure.
-* **num_inference_steps**: number of diffusions steps.
-* **guidance_scale**: classifier-free guidance.
-* **seed**: general random seed to initialize latents.
-* **tile_height**: height in pixels of each grid tile.
-* **tile_width**: width in pixels of each grid tile.
-* **tile_row_overlap**: number of overlap pixels between tiles in consecutive rows.
-* **tile_col_overlap**: number of overlap pixels between tiles in consecutive columns.
-* **guidance_scale_tiles**: specific weights for classifier-free guidance in each tile.
-* **guidance_scale_tiles**: specific weights for classifier-free guidance in each tile. If `None`, the value provided in `guidance_scale` will be used.
-* **seed_tiles**: specific seeds for the initialization latents in each tile. These will override the latents generated for the whole canvas using the standard `seed` parameter.
-* **seed_tiles_mode**: either `"full"` `"exclusive"`. If `"full"`, all the latents affected by the tile be overriden. If `"exclusive"`, only the latents that are affected exclusively by this tile (and no other tiles) will be overrriden.
-* **seed_reroll_regions**: a list of tuples in the form (start row, end row, start column, end column, seed) defining regions in pixel space for which the latents will be overriden using the given seed. Takes priority over `seed_tiles`.
-* **cpu_vae**: the decoder from latent space to pixel space can require too mucho GPU RAM for large images. If you find out of memory errors at the end of the generation process, try setting this parameter to `True` to run the decoder in CPU. Slower, but should run without memory issues.
-
-#### Technical details
-
-To initialize the generation process, the size of the canvas is computed based on the number of tile columns and rows selected, the tile size and tile overlapping. The corresponding size of the latent space is computed, and a matrix of latents is initialized using the provided seeds: first the general seed, then the specific tiles seeds (if provided) and finally the reroll regions seeds. The generation process then proceeds as follows:
-
-* Compute a mask of weights $M_t$ for every tile $t$. This mask follows a bidimensional gaussian distribution with mean at the tile center, and variance 0.01.
-* For each inference step $k$:
-    * Initialize the overall noise predictions $N$ as an all zeroes matrix.
-    * For each tile $t$:
-        * Let $X_t$ be the matrix of latents contained in tile $t$, and its prompt $p_t$
-        * Run the standard noise prediction procedure of the diffusion process at time $k$, but using only the latents $X_t$ and prompt $p_t$. Let $N_t$ be the obtained noise predictions.
-          * (that is, obtain noise predictions $N_t$ by running $X_t$ through the diffusion process U-net, with timestep $t$ and prompt $p_t$, and also without the prompt to compute classifier-free guidance)
-        * Add to the overall noise predictions $N$ the noise predictions $N_t$ multiplied by the tile mask $M_t$, at the positions corresponding with the location of the current tile $t$.
-    * Normalize $N$ by dividing each value by the sum of mask weights that contributed to that value.
-    * Run the standard diffusion model scheduler with the noise predictions $N$.
+> `prompt`: either a single string (no tiling) or a list of lists with all the prompts to use (one list for each row of tiles). This will also define the tiling structure.
+>
+> `num_inference_steps`: number of diffusions steps.
+> 
+> `guidance_scale`: classifier-free guidance.
+>
+> `seed`: general random seed to initialize latents.
+>
+> `tile_height`: height in pixels of each grid tile.
+>
+> `tile_width`: width in pixels of each grid tile.
+>
+> `tile_row_overlap`: number of overlap pixels between tiles in consecutive rows.
+>
+> `tile_col_overlap`: number of overlap pixels between tiles in consecutive columns.
+>
+> `guidance_scale_tiles`: specific weights for classifier-free guidance in each tile.
+>
+> `guidance_scale_tiles`: specific weights for classifier-free guidance in each tile. If `None`, the value provided in `guidance_scale` will be used.
+>
+> `seed_tiles`: specific seeds for the initialization latents in each tile. These will override the latents generated for the whole canvas using the standard `seed` parameter.
+>
+> `seed_tiles_mode`: either `"full"` `"exclusive"`. If `"full"`, all the latents affected by the tile be overriden. If `"exclusive"`, only the latents that are affected exclusively by this tile (and no other tiles) will be overrriden.
+>
+> `seed_reroll_regions`: a list of tuples in the form (start row, end row, start column, end column, seed) defining regions in pixel space for which the latents will be overriden using the given seed. Takes priority over `seed_tiles`.
+>
+> `cpu_vae`: the decoder from latent space to pixel space can require too mucho GPU RAM for large images. If you find out of memory errors at the end of the generation process, try setting this parameter to `True` to run the decoder in CPU. Slower, but should run without memory issues.
 
 ### StableDiffusionCanvasPipeline
 
@@ -211,8 +209,57 @@ image = pipeline(
 )["sample"][0]
 ```
 
-TODO: more details on parameters
+The full list of arguments to a `StableDiffusionCanvasPipeline` is:
 
+> `canvas_height`: height in pixels of the image to generate.
+> 
+> `canvas_width`: width in pixels of the image to generate.
+>
+> `regions`: list of `Text2Image` or `Image2Image` diffusion regions (see below).
+> 
+> `num_inference_steps`: number of diffusions steps.
+> 
+> `seed`: general random seed to initialize latents.
+> 
+> `reroll_regions`: list of `RerollRegion` regions in which to reroll latents (see below). Useful if you like the overall aspect of the generated image, but want to regenerate a specific region using a different random seed.
+> 
+> `cpu_vae`: whether to perform encoder-decoder operations in CPU, even if the diffusion process runs in GPU. Use `cpu_vae=True` if you run out of GPU memory at the end of the generation process for large canvas dimensions, or if you create large `Image2Image` regions.
+> 
+> `decode_steps`: if `True` the result will include not only the final image, but also all the intermediate steps in the generation. Note: this will greatly increase running times.
+
+All regions are configured with the following parameters:
+
+> `row_init`: starting row in pixel space (included)
+>
+> `row_end`: end row in pixel space (not included)
+>
+> `col_init`: starting column in pixel space (included)
+>
+> `col_end`: end column in pixel space (not included)
+>
+> `region_seed`: seed for random operations in this region
+>
+> `noise_eps`: deviation of a zero-mean gaussian noise to be applied over the latents in this region. Useful for slightly "rerolling" latents
+
+Additionally, `Text2Image` regions use the following arguments:
+
+> `prompt`: text prompt guiding the diffuser in this region
+>
+> `guidance_scale`: guidance scale of the diffuser in this region. If None, randomize.
+>
+> `mask_type`: kind of weight mask applied to this region, must be one of `["constant", gaussian", quartic"]`.
+>
+> `mask_weight`: global weights multiplier of the mask.
+
+`Image2Image` regions are configured with the basic region parameters plus ther following:
+
+> `reference_image`: image to use as guidance. Must be loaded as a PIL image and pre-processed using the `preprocess_image` function (see example above). It will be automatically rescaled to the shape of the region.
+>
+> `strength`: strength of the image guidance, must lie in the range `[0.0, 1.0]` (from no guidance to absolute priority of the original image).
+
+Finally, `RerollRegions` accept the basic arguments plus the following:
+
+> `reroll_mode`: kind of reroll to perform, either `reset` (completely reset latents with new ones) or `epsilon` (alter slightly the latents in the region).
 
 ## Citing
 
