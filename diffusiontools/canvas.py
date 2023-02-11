@@ -12,7 +12,7 @@ from typing import List, Optional, Tuple, Union
 
 from diffusers.models import AutoencoderKL, UNet2DConditionModel
 from diffusers.pipeline_utils import DiffusionPipeline
-from diffusers.schedulers import DDIMScheduler, PNDMScheduler
+from diffusers.schedulers import DDIMScheduler, LMSDiscreteScheduler, PNDMScheduler
 from diffusers.pipelines.stable_diffusion import StableDiffusionSafetyChecker
 
 
@@ -219,7 +219,7 @@ class StableDiffusionCanvasPipeline(DiffusionPipeline):
         text_encoder: CLIPTextModel,
         tokenizer: CLIPTokenizer,
         unet: UNet2DConditionModel,
-        scheduler: Union[DDIMScheduler, PNDMScheduler],  # FIXME: any scheduler should be OK
+        scheduler: Union[DDIMScheduler, LMSDiscreteScheduler, PNDMScheduler],
         safety_checker: StableDiffusionSafetyChecker,
         feature_extractor: CLIPFeatureExtractor,
     ):
