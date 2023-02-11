@@ -30,5 +30,7 @@ jobs:
         activate-environment: mixture_of_diffusers
         environment-file: environment.yml
     - name: Test with pytest
+      env:
+        HUGGING_FACE_HUB_TOKEN: ${{ secrets.huggingface_token }}
       run: |
         conda install pytest && pytest
