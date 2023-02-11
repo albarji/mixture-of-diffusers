@@ -106,8 +106,9 @@ def canvas_pipeline():
         use_auth_token=True
     )
 
-@pytest.mark.parametrize("canvas_params", [
-    {
+@pytest.fixture()
+def basic_canvas_params():
+    return {
         "canvas_height": 64,
         "canvas_width": 64,
         "regions": [
@@ -115,40 +116,26 @@ def canvas_pipeline():
             Text2ImageRegion(16, 64, 0, 48, mask_type="gaussian", prompt="Something else"),
             Text2ImageRegion(0, 48, 16, 64, mask_type="gaussian", prompt="Something more"),
             Text2ImageRegion(16, 64, 16, 64, mask_type="gaussian", prompt="One last thing"),
-        ],
-        "num_inference_steps": 1
-    },
-    {
-        "canvas_height": 64,
-        "canvas_width": 64,
-        "regions": [
-            Text2ImageRegion(0, 48, 0, 48, mask_type="gaussian", prompt="Something"),
-            Text2ImageRegion(16, 64, 0, 48, mask_type="gaussian", prompt="Something else"),
-            Text2ImageRegion(0, 48, 16, 64, mask_type="gaussian", prompt="Something more"),
-            Text2ImageRegion(16, 64, 16, 64, mask_type="gaussian", prompt="One last thing"),
-        ],
-        "num_inference_steps": 1,
-        "seed": 12345,
-        "cpu_vae": False,
+        ]
     }
+
+@pytest.mark.parametrize("extra_canvas_params", [
+    {"num_inference_steps": 1},
+    {"num_inference_steps": 1, "cpu_vae": True},
 ])
-def test_stable_diffusion_canvas_pipeline_correct(canvas_pipeline, canvas_params):
+def test_stable_diffusion_canvas_pipeline_correct(canvas_pipeline, basic_canvas_params, extra_canvas_params):
     """The StableDiffusionCanvasPipeline works for some correct configurations"""
-    image = canvas_pipeline(**canvas_params)["sample"][0]
+    image = canvas_pipeline(**basic_canvas_params, **extra_canvas_params)["sample"][0]
     assert image.size == (64, 64)
 
-def test_stable_diffusion_canvas_pipeline_image2image_correct(canvas_pipeline, base_image):
+@pytest.mark.parametrize("extra_canvas_params", [
+    {"num_inference_steps": 3},
+    {"num_inference_steps": 3, "cpu_vae": True},
+])
+def test_stable_diffusion_canvas_pipeline_image2image_correct(canvas_pipeline, basic_canvas_params, base_image, extra_canvas_params):
     """The StableDiffusionCanvasPipeline works for some correct configurations when including a Text2ImageRegion"""
-    image = canvas_pipeline(
-        canvas_height=64,
-        canvas_width=64,
-        regions= [
-            Text2ImageRegion(0, 48, 0, 48, mask_type="gaussian", prompt="Something"),
-            Text2ImageRegion(16, 64, 0, 48, mask_type="gaussian", prompt="Something else"),
-            Text2ImageRegion(0, 48, 16, 64, mask_type="gaussian", prompt="Something more"),
-            Text2ImageRegion(16, 64, 16, 64, mask_type="gaussian", prompt="One last thing"),
-            Image2ImageRegion(16, 64, 0, 48, reference_image=base_image, strength=0.5),
-        ],
-        num_inference_steps=2
-    )["sample"][0]
+    all_canvas_params = {**basic_canvas_params, **extra_canvas_params}
+    all_canvas_params["regions"] += [Image2ImageRegion(16, 64, 0, 48, reference_image=base_image, strength=0.5)]
+
+    image = canvas_pipeline(**all_canvas_params)["sample"][0]
     assert image.size == (64, 64)
