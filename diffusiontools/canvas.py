@@ -59,8 +59,6 @@ class CanvasRegion:
         self.latent_row_end = self.row_end // 8
         self.latent_col_init = self.col_init // 8
         self.latent_col_end = self.col_end // 8
-        # Initialize region generator
-        self.region_generator = torch.Generator("cuda").manual_seed(self.region_seed)
 
     @property
     def width(self):
@@ -69,6 +67,11 @@ class CanvasRegion:
     @property
     def height(self):
         return self.row_end - self.row_init
+
+    def get_region_generator(self, device="cpu"):
+        """Creates a torch.Generator based on the random seed of this region"""
+        # Initialize region generator
+        return torch.Generator(device).manual_seed(self.region_seed)
 
     @property
     def __dict__(self):
@@ -300,14 +303,14 @@ class StableDiffusionCanvasPipeline(DiffusionPipeline):
         for region in reroll_regions:
             if region.reroll_mode == RerollModes.RESET.value:
                 region_shape = (latents_shape[0], latents_shape[1], region.latent_row_end - region.latent_row_init, region.latent_col_end - region.latent_col_init)
-                init_noise[:, :, region.latent_row_init:region.latent_row_end, region.latent_col_init:region.latent_col_end] = torch.randn(region_shape, generator=region.region_generator, device=self.device)
+                init_noise[:, :, region.latent_row_init:region.latent_row_end, region.latent_col_init:region.latent_col_end] = torch.randn(region_shape, generator=region.get_region_generator(self.device), device=self.device)
 
         # Apply epsilon noise to regions: first diffusion regions, then reroll regions
         all_eps_rerolls = regions + [r for r in reroll_regions if r.reroll_mode == RerollModes.EPSILON.value]
         for region in all_eps_rerolls:
             if region.noise_eps > 0:
                 region_noise = init_noise[:, :, region.latent_row_init:region.latent_row_end, region.latent_col_init:region.latent_col_end]
-                eps_noise = torch.randn(region_noise.shape, generator=region.region_generator, device=self.device) * region.noise_eps
+                eps_noise = torch.randn(region_noise.shape, generator=region.get_region_generator(self.device), device=self.device) * region.noise_eps
                 init_noise[:, :, region.latent_row_init:region.latent_row_end, region.latent_col_init:region.latent_col_end] += eps_noise
 
         # scale the initial noise by the standard deviation required by the scheduler
