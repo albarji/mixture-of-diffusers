@@ -43,11 +43,22 @@ class CanvasRegion:
         # Initialize arguments if not specified
         if self.region_seed is None:
             self.region_seed = np.random.randint(9999999999)
+        # Check coordinates are non-negative
+        for coord in [self.row_init, self.row_end, self.col_init, self.col_end]:
+            if coord < 0:
+                raise ValueError(f"A CanvasRegion must be defined with non-negative indices, found ({self.row_init}, {self.row_end}, {self.col_init}, {self.col_end})")
+        # Check coordinates are divisible by 8, else we end up with nasty rounding error when mapping to latent space
+        for coord in [self.row_init, self.row_end, self.col_init, self.col_end]:
+            if coord // 8 != coord / 8:
+                raise ValueError(f"A CanvasRegion must be defined with locations divisible by 8, found ({self.row_init}-{self.row_end}, {self.col_init}-{self.col_end})")
+        # Check noise eps is non-negative
+        if self.noise_eps < 0:
+            raise ValueError(f"A CanvasRegion must be defined noises eps non-negative, found {self.noise_eps}")
         # Compute coordinates for this region in latent space
         self.latent_row_init = self.row_init // 8
-        self.latent_row_end = self.latent_row_init + (self.row_end - self.row_init) // 8  # Row end might not be self.row_end // 8 if the number of rows is not a multiple of 8, hence this calculation
+        self.latent_row_end = self.row_end // 8
         self.latent_col_init = self.col_init // 8
-        self.latent_col_end = self.latent_col_init + (self.col_end - self.col_init) // 8
+        self.latent_col_end = self.col_end // 8
         # Initialize region generator
         self.region_generator = torch.Generator("cuda").manual_seed(self.region_seed)
 
@@ -67,7 +78,7 @@ class CanvasRegion:
 @dataclass
 class DiffusionRegion(CanvasRegion):
     """Abstract class defining a region where a diffusion process is acting"""
-    mask_type: MaskModes = MaskModes.CONSTANT.value  # Kind of mask applied to this region  # TODO: masks are not used in Image2Image regions
+    mask_type: MaskModes = MaskModes.CONSTANT.value  # Kind of mask applied to this region  # TODO: masks are not used in Image2Image regions, move this to Text2ImageRegion
     mask_weight: float = 1.0  # Strength of the mask
 
 
@@ -87,6 +98,12 @@ class Text2ImageRegion(DiffusionRegion):
 
     def __post_init__(self):
         super().__post_init__()
+        # Mask weight cannot be negative
+        if self.mask_weight < 0:
+            raise ValueError(f"A Text2ImageRegion must be defined with non-negative mask weight, found {self.mask_weight}")
+        # Mask type must be an actual known mask
+        if self.mask_type not in [e.value for e in MaskModes]:
+            raise ValueError(f"A Text2ImageRegion was defined with mask {self.mask_type}, which is not an accepted mask ({[e.value for e in MaskModes]})")
         # Randomize arguments if given as None
         if self.guidance_scale is None:
             self.guidance_scale = np.random.randint(5, 30)
@@ -120,7 +137,9 @@ class Image2ImageRegion(DiffusionRegion):
 
     def encode_reference_image(self, encoder, device, generator):
         """Encodes the reference image for this Image2Image region into the latent space"""
+        # TODO: encode in CPU or not following the parameter cpu_vae
         self.reference_latents = encoder.encode(self.reference_image.to(device)).latent_dist.sample(generator=generator)
+        #self.reference_latents = encoder.cpu().encode(self.reference_image).latent_dist.mean.to(device)
         self.reference_latents = 0.18215 * self.reference_latents
 
     @property
@@ -196,7 +215,7 @@ class StableDiffusionCanvasPipeline(DiffusionPipeline):
         text_encoder: CLIPTextModel,
         tokenizer: CLIPTokenizer,
         unet: UNet2DConditionModel,
-        scheduler: Union[DDIMScheduler, PNDMScheduler],
+        scheduler: Union[DDIMScheduler, PNDMScheduler],  # FIXME: any scheduler should be OK
         safety_checker: StableDiffusionSafetyChecker,
         feature_extractor: CLIPFeatureExtractor,
     ):
@@ -227,8 +246,6 @@ class StableDiffusionCanvasPipeline(DiffusionPipeline):
         image = (image / 2 + 0.5).clamp(0, 1)
         image = image.cpu().permute(0, 2, 3, 1).numpy()
 
-        # TODO maybe add the latent upscaler by Rivers Have Wings: https://twitter.com/StabilityAI/status/1590531946026717186
-
         return self.numpy_to_pil(image)
 
     def get_latest_timestep_img2img(self, num_inference_steps, strength):
@@ -250,7 +267,7 @@ class StableDiffusionCanvasPipeline(DiffusionPipeline):
         canvas_width: int,
         regions: List[DiffusionRegion],
         num_inference_steps: Optional[int] = 50,
-        seed: Optional[int] = None,
+        seed: Optional[int] = 12345,
         reroll_regions: Optional[List[RerollRegion]] = None,
         cpu_vae: Optional[bool] = False,
         decode_steps: Optional[bool] = False
@@ -276,7 +293,7 @@ class StableDiffusionCanvasPipeline(DiffusionPipeline):
 
         # Create original noisy latents using the timesteps
         latents_shape = (batch_size, self.unet.in_channels, canvas_height // 8, canvas_width // 8)
-        generator = torch.Generator("cuda").manual_seed(seed)
+        generator = torch.Generator(self.device).manual_seed(seed)
         init_noise = torch.randn(latents_shape, generator=generator, device=self.device)
 
         # Reset latents in seed reroll regions, if requested
