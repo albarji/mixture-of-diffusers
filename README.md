@@ -290,7 +290,7 @@ Here are some relevant illustrations I have created using this software (and put
 
 ### Looking through the eyes of giants
 
-![Looking through the eyes of giants](https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/f/cd1358aa-80d5-4c59-b95b-cdfde5dcc4f5/dfnh0pv-f7bd8a03-15f5-43ee-8dbd-d67cb3ae8a13.png?token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1cm46YXBwOjdlMGQxODg5ODIyNjQzNzNhNWYwZDQxNWVhMGQyNmUwIiwiaXNzIjoidXJuOmFwcDo3ZTBkMTg4OTgyMjY0MzczYTVmMGQ0MTVlYTBkMjZlMCIsIm9iaiI6W1t7InBhdGgiOiJcL2ZcL2NkMTM1OGFhLTgwZDUtNGM1OS1iOTViLWNkZmRlNWRjYzRmNVwvZGZuaDBwdi1mN2JkOGEwMy0xNWY1LTQzZWUtOGRiZC1kNjdjYjNhZThhMTMucG5nIn1dXSwiYXVkIjpbInVybjpzZXJ2aWNlOmZpbGUuZG93bmxvYWQiXX0.NhIjpWMoWv7OJuZT0qKxberVT0g6rKeoQHz9SyRiI4A)
+![Looking through the eyes of giants](https://user-images.githubusercontent.com/9654655/218307148-95ce88b6-b2a3-458d-b469-daf5bd56e3a7.jpg)
 
 [Follow me on DeviantArt for more!](https://www.deviantart.com/albarji)
 
