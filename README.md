@@ -1,14 +1,10 @@
-# Mixture of diffusers for location-aware image generation
+# Mixture of Diffusers
 
 ![2022-10-12 15_35_27 305133_A charming house in the countryside, by jakub rozalski, sunset lighting, elegant, highly detailed, s_640x640_schelms_seed7178915308_gc8_steps50](https://user-images.githubusercontent.com/9654655/195362341-bc7766c2-f5c6-40f2-b457-59277aa11027.png)
 
 [![Unit tests](https://github.com/albarji/mixture-of-diffusers/actions/workflows/python-tests.yml/badge.svg)](https://github.com/albarji/mixture-of-diffusers/actions/workflows/python-tests.yml)
 
 This repository holds various scripts and tools implementing a method for integrating a mixture of different diffusion processes collaborating to generate a single image. Each diffuser focuses on a particular region on the image, taking into account boundary effects to promote a smooth blending.
-
-## WARNING
-
-This develop version is currently unstable. Please use the [latest tag](https://github.com/albarji/mixture-of-diffusers/tree/0.1.0) instead.
 
 ## Motivation
 
@@ -155,6 +151,8 @@ The full list of arguments to a `StableDiffusionTilingPipeline` is:
 >
 > `cpu_vae`: the decoder from latent space to pixel space can require too mucho GPU RAM for large images. If you find out of memory errors at the end of the generation process, try setting this parameter to `True` to run the decoder in CPU. Slower, but should run without memory issues.
 
+A script showing a more advanced use of this pipeline is available as [generate_grid.py](./generate_grid.py).
+
 ### StableDiffusionCanvasPipeline
 
 The `StableDiffusionCanvasPipeline` works by defining a list of `Text2ImageRegion` objects that detail the region of influence of each diffuser. As an illustrative example, the heading image at this repo can be generated with the following code:
@@ -264,12 +262,6 @@ Finally, `RerollRegions` accept the basic arguments plus the following:
 
 > `reroll_mode`: kind of reroll to perform, either `reset` (completely reset latents with new ones) or `epsilon` (alter slightly the latents in the region).
 
-### Other helper tools
-
-This repository also contains a number of scripts and somewhat helping tools:
-
-* TODO
-
 ## Citing and full technical details
 
 If you find this repository useful, please be so kind to cite the corresponding paper, which also contains the full details about this method:
@@ -281,6 +273,24 @@ If you find this repository useful, please be so kind to cite the corresponding 
 The same recommendations as in Stable Diffusion apply, so please check the corresponding [model card](https://huggingface.co/CompVis/stable-diffusion-v1-4).
 
 More broadly speaking, always bear this in mind: YOU are responsible for the content you create using this tool. Do not fully blame, credit, or place the responsibility on the software.
+
+## Gallery
+
+Here are some relevant illustrations I have created using this software (and putting quite a few hours into them!).
+
+### Darkness Dawning
+
+![Darkness Dawning](https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/f/cd1358aa-80d5-4c59-b95b-cdfde5dcc4f5/dfidq8n-6da9a886-9f1c-40ae-8341-d77af9552395.png?token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1cm46YXBwOjdlMGQxODg5ODIyNjQzNzNhNWYwZDQxNWVhMGQyNmUwIiwiaXNzIjoidXJuOmFwcDo3ZTBkMTg4OTgyMjY0MzczYTVmMGQ0MTVlYTBkMjZlMCIsIm9iaiI6W1t7InBhdGgiOiJcL2ZcL2NkMTM1OGFhLTgwZDUtNGM1OS1iOTViLWNkZmRlNWRjYzRmNVwvZGZpZHE4bi02ZGE5YTg4Ni05ZjFjLTQwYWUtODM0MS1kNzdhZjk1NTIzOTUucG5nIn1dXSwiYXVkIjpbInVybjpzZXJ2aWNlOmZpbGUuZG93bmxvYWQiXX0.ff6XoVBPdUbcTLcuHUpQMPrD2TaXBM_s6HfRhsARDw0)
+
+### Yog-Sothoth
+
+![Yog-Sothoth](https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/f/cd1358aa-80d5-4c59-b95b-cdfde5dcc4f5/dfidsq4-174dd428-2c5a-48f6-a78f-9441fb3cffea.png?token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1cm46YXBwOjdlMGQxODg5ODIyNjQzNzNhNWYwZDQxNWVhMGQyNmUwIiwiaXNzIjoidXJuOmFwcDo3ZTBkMTg4OTgyMjY0MzczYTVmMGQ0MTVlYTBkMjZlMCIsIm9iaiI6W1t7InBhdGgiOiJcL2ZcL2NkMTM1OGFhLTgwZDUtNGM1OS1iOTViLWNkZmRlNWRjYzRmNVwvZGZpZHNxNC0xNzRkZDQyOC0yYzVhLTQ4ZjYtYTc4Zi05NDQxZmIzY2ZmZWEucG5nIn1dXSwiYXVkIjpbInVybjpzZXJ2aWNlOmZpbGUuZG93bmxvYWQiXX0.X42zWgsk3lYnYwuEgkifRFRH2km-npHvrdleDN3m6bA)
+
+### Looking through the eyes of giants
+
+![Looking through the eyes of giants](https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/f/cd1358aa-80d5-4c59-b95b-cdfde5dcc4f5/dfnh0pv-f7bd8a03-15f5-43ee-8dbd-d67cb3ae8a13.png?token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1cm46YXBwOjdlMGQxODg5ODIyNjQzNzNhNWYwZDQxNWVhMGQyNmUwIiwiaXNzIjoidXJuOmFwcDo3ZTBkMTg4OTgyMjY0MzczYTVmMGQ0MTVlYTBkMjZlMCIsIm9iaiI6W1t7InBhdGgiOiJcL2ZcL2NkMTM1OGFhLTgwZDUtNGM1OS1iOTViLWNkZmRlNWRjYzRmNVwvZGZuaDBwdi1mN2JkOGEwMy0xNWY1LTQzZWUtOGRiZC1kNjdjYjNhZThhMTMucG5nIn1dXSwiYXVkIjpbInVybjpzZXJ2aWNlOmZpbGUuZG93bmxvYWQiXX0.NhIjpWMoWv7OJuZT0qKxberVT0g6rKeoQHz9SyRiI4A)
+
+[Follow me on DeviantArt for more!](https://www.deviantart.com/albarji)
 
 ## Acknowledgements
 

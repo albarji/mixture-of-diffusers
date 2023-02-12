@@ -1,14 +1,14 @@
 from copy import deepcopy
-import datetime;
+import datetime
 from diffusers import LMSDiscreteScheduler, DDIMScheduler
 import git
 import json
 import numpy as np
 
-from mixdiff.tiling import StableDiffusionTilingPipeline
+from mixdiff import StableDiffusionTilingPipeline
 
 ### CONFIG START
-n = 20
+n = 3
 sche = "lms"
 gc = 8
 seed = None
