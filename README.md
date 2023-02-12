@@ -210,6 +210,8 @@ image = pipeline(
 )["sample"][0]
 ```
 
+![githubIIC](https://user-images.githubusercontent.com/9654655/218306373-fbae1381-178a-454c-89bf-0c299af4fb96.png)
+
 The full list of arguments to a `StableDiffusionCanvasPipeline` is:
 
 > `canvas_height`: height in pixels of the image to generate. Must be a multiple of 8.
