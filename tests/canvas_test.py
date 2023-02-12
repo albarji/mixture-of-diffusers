@@ -2,8 +2,8 @@ from diffusers import LMSDiscreteScheduler
 from PIL import Image
 import pytest
 
-from mixdiff.canvas import CanvasRegion, Image2ImageRegion, StableDiffusionCanvasPipeline, Text2ImageRegion
-from mixdiff.imgtools import preprocess_image
+from mixdiff import Image2ImageRegion, StableDiffusionCanvasPipeline, Text2ImageRegion, preprocess_image
+from mixdiff.canvas import CanvasRegion
 
 ### CanvasRegion tests
 
