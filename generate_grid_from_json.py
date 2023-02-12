@@ -4,7 +4,7 @@ from diffusers import LMSDiscreteScheduler, DDIMScheduler
 import json
 import torch
 
-from diffusiontools.tiling import StableDiffusionTilingPipeline
+from mixdiff.tiling import StableDiffusionTilingPipeline
 
 def generate_grid(generation_arguments):
     model_id = "CompVis/stable-diffusion-v1-4"

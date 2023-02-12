@@ -10,7 +10,7 @@ This repository holds various scripts and tools implementing a method for integr
 
 This develop version is currently unstable. Please use the [latest tag](https://github.com/albarji/mixture-of-diffusers/tree/0.1.0) instead.
 
-## Explanation
+## Motivation
 
 Current image generation methods, such as Stable Diffusion, struggle to position objects at specific locations. While the content of the generated image (somewhat) reflects the objects present in the prompt, it is difficult to frame the prompt in a way that creates an specific composition. For instance, take a prompt expressing a complex composition such as
 
@@ -43,11 +43,15 @@ The method proposed here strives to provide a better tool for image composition 
 
 The mixture of diffusion processes is done in a way that harmonizes the generation process, preventing "seam" effects in the generated image.
 
-Using several diffusion processes in parallel has also practical advantages when generating very large images, as the GPU memory requirements are similar to that of generating an of the size of a single tile.
+Using several diffusion processes in parallel has also practical advantages when generating very large images, as the GPU memory requirements are similar to that of generating an image of the size of a single tile.
 
 ## Usage
 
 This repository provides two new pipelines, `StableDiffusionTilingPipeline` and `StableDiffusionCanvasPipeline`, that extend the standard Stable Diffusion pipeline from [Diffusers](https://github.com/huggingface/diffusers). They feature new options that allow defining the mixture of diffusers, which are distributed as a number of "diffusion regions" over the image to be generated. `StableDiffusionTilingPipeline` is simpler to use and arranges the diffusion regions as a grid over the canvas, while `StableDiffusionCanvasPipeline` allows a more flexible placement and also features image2image capabilities.
+
+### Prerequisites
+
+Since this work is based on Stable Diffusion models, you will need to [request access and accept the usage terms of Stable Diffusion](https://huggingface.co/CompVis/stable-diffusion#model-access). You will also need to [configure your Hugging Face User Access Token](https://huggingface.co/docs/hub/security-tokens) in your running environment.
 
 ### StableDiffusionTilingPipeline
 
@@ -55,7 +59,7 @@ The header image in this repo can be generated as follows
 
 ```python
 from diffusers import LMSDiscreteScheduler
-from diffusiontools.tiling import StableDiffusionTilingPipeline
+from mixdiff import StableDiffusionTilingPipeline
 
 # Creater scheduler and model (similar to StableDiffusionPipeline)
 scheduler = LMSDiscreteScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", num_train_timesteps=1000)
@@ -84,7 +88,7 @@ Alternatively, it is possible to specify the grid parameters through a JSON conf
 
 ![gridExampleLabeled](https://user-images.githubusercontent.com/9654655/195371664-54d8a599-25d8-46ba-b823-3c7726ecb6ff.png)
 
-An `StableDiffusionTilingPipeline` is configured to use 10 prompts with changing styles. Each tile takes a shape of 768x512 pixels, and tiles overlap 256 pixels to avoid seam effects. All the details are specified in a configuration file:
+A `StableDiffusionTilingPipeline` is configured to use 10 prompts with changing styles. Each tile takes a shape of 768x512 pixels, and tiles overlap 256 pixels to avoid seam effects. All the details are specified in a configuration file:
 
 ```json
 {
@@ -117,7 +121,7 @@ An `StableDiffusionTilingPipeline` is configured to use 10 prompts with changing
 
 You can try generating this image using this configuration file by running
 
-```
+```bash
 python generate_grid_from_json.py examples/linearForest.json
 ```
 
@@ -126,7 +130,7 @@ The full list of arguments to a `StableDiffusionTilingPipeline` is:
 > `prompt`: either a single string (no tiling) or a list of lists with all the prompts to use (one list for each row of tiles). This will also define the tiling structure.
 >
 > `num_inference_steps`: number of diffusions steps.
-> 
+>
 > `guidance_scale`: classifier-free guidance.
 >
 > `seed`: general random seed to initialize latents.
@@ -157,7 +161,7 @@ The `StableDiffusionCanvasPipeline` works by defining a list of `Text2ImageRegio
 
 ```python
 from diffusers import LMSDiscreteScheduler
-from diffusiontools.canvas import StableDiffusionCanvasPipeline, Text2ImageRegion
+from mixdiff import StableDiffusionCanvasPipeline, Text2ImageRegion
 
 # Creater scheduler and model (similar to StableDiffusionPipeline)
 scheduler = LMSDiscreteScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", num_train_timesteps=1000)
@@ -185,8 +189,7 @@ image = pipeline(
 ```python
 from PIL import Image
 from diffusers import LMSDiscreteScheduler
-from diffusiontools.canvas import StableDiffusionCanvasPipeline, Text2ImageRegion, Image2ImageRegion
-from diffusiontools.imgtools import preprocess_image
+from mixdiff import StableDiffusionCanvasPipeline, Text2ImageRegion, Image2ImageRegion, preprocess_image
 
 # Creater scheduler and model (similar to StableDiffusionPipeline)
 scheduler = LMSDiscreteScheduler(beta_start=0.00085, beta_end=0.012, beta_schedule="scaled_linear", num_train_timesteps=1000)
@@ -211,31 +214,31 @@ image = pipeline(
 
 The full list of arguments to a `StableDiffusionCanvasPipeline` is:
 
-> `canvas_height`: height in pixels of the image to generate.
-> 
-> `canvas_width`: width in pixels of the image to generate.
+> `canvas_height`: height in pixels of the image to generate. Must be a multiple of 8.
+>
+> `canvas_width`: width in pixels of the image to generate. Must be a multiple of 8.
 >
 > `regions`: list of `Text2Image` or `Image2Image` diffusion regions (see below).
-> 
+>
 > `num_inference_steps`: number of diffusions steps.
-> 
+>
 > `seed`: general random seed to initialize latents.
-> 
+>
 > `reroll_regions`: list of `RerollRegion` regions in which to reroll latents (see below). Useful if you like the overall aspect of the generated image, but want to regenerate a specific region using a different random seed.
-> 
+>
 > `cpu_vae`: whether to perform encoder-decoder operations in CPU, even if the diffusion process runs in GPU. Use `cpu_vae=True` if you run out of GPU memory at the end of the generation process for large canvas dimensions, or if you create large `Image2Image` regions.
-> 
+>
 > `decode_steps`: if `True` the result will include not only the final image, but also all the intermediate steps in the generation. Note: this will greatly increase running times.
 
 All regions are configured with the following parameters:
 
-> `row_init`: starting row in pixel space (included)
+> `row_init`: starting row in pixel space (included). Must be a multiple of 8.
 >
-> `row_end`: end row in pixel space (not included)
+> `row_end`: end row in pixel space (not included). Must be a multiple of 8.
 >
-> `col_init`: starting column in pixel space (included)
+> `col_init`: starting column in pixel space (included). Must be a multiple of 8.
 >
-> `col_end`: end column in pixel space (not included)
+> `col_end`: end column in pixel space (not included). Must be a multiple of 8.
 >
 > `region_seed`: seed for random operations in this region
 >
@@ -261,11 +264,23 @@ Finally, `RerollRegions` accept the basic arguments plus the following:
 
 > `reroll_mode`: kind of reroll to perform, either `reset` (completely reset latents with new ones) or `epsilon` (alter slightly the latents in the region).
 
-## Citing
+### Other helper tools
 
-If you find this repository useful, please be so kind to cite the corresponding paper:
+This repository also contains a number of scripts and somewhat helping tools:
+
+* TODO
+
+## Citing and full technical details
+
+If you find this repository useful, please be so kind to cite the corresponding paper, which also contains the full details about this method:
 
 > Álvaro Barbero Jiménez. Mixture of Diffusers for scene composition and high resolution image generation. https://arxiv.org/abs/2302.02412
+
+## Responsible use
+
+The same recommendations as in Stable Diffusion apply, so please check the corresponding [model card](https://huggingface.co/CompVis/stable-diffusion-v1-4).
+
+More broadly speaking, always bear this in mind: YOU are responsible for the content you create using this tool. Do not fully blame, credit, or place the responsibility on the software.
 
 ## Acknowledgements
 

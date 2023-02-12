@@ -14,7 +14,7 @@ from diffusers.schedulers import DDIMScheduler, PNDMScheduler
 from diffusers.pipelines.stable_diffusion import StableDiffusionSafetyChecker
 from diffusers.schedulers import LMSDiscreteScheduler
 
-from diffusiontools.extrasmixin import StableDiffusionExtrasMixin
+from .extrasmixin import StableDiffusionExtrasMixin
 
 
 class StableDiffusionTilingPipeline(DiffusionPipeline, StableDiffusionExtrasMixin):

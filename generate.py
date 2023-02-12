@@ -5,9 +5,9 @@ import numpy as np
 from PIL import Image
 import torch
 
-from diffusiontools.image2image import StableDiffusionImg2ImgPipeline
-from diffusiontools.inpainting import StableDiffusionInpaintPipeline
-from diffusiontools.imgtools import preprocess_image, preprocess_mask
+from mixdiff.image2image import StableDiffusionImg2ImgPipeline
+from mixdiff.inpainting import StableDiffusionInpaintPipeline
+from mixdiff.imgtools import preprocess_image, preprocess_mask
 
 
 def dummy_checker(images, **kwargs):

@@ -5,7 +5,7 @@ import git
 import json
 import numpy as np
 
-from diffusiontools.tiling import StableDiffusionTilingPipeline
+from mixdiff.tiling import StableDiffusionTilingPipeline
 
 ### CONFIG START
 n = 20
