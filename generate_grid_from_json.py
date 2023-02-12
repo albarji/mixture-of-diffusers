@@ -2,6 +2,7 @@ import argparse
 import datetime
 from diffusers import LMSDiscreteScheduler, DDIMScheduler
 import json
+from pathlib import Path
 import torch
 
 from mixdiff.tiling import StableDiffusionTilingPipeline
@@ -34,7 +35,9 @@ def generate_grid(generation_arguments):
     if "seed_reroll_regions" in generation_arguments: pipeargs = {**pipeargs, "seed_reroll_regions": generation_arguments["seed_reroll_regions"]}
     image = pipe(**pipeargs)["sample"][0]
     outname = "output"
-    image.save(f"outputs/{outname}.png")
+    outpath = "./outputs"
+    Path(outpath).mkdir(parents=True, exist_ok=True)
+    image.save(f"{outpath}/{outname}.png")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Generate a stable diffusion grid using a JSON file with all configuration parameters.')

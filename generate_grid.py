@@ -4,6 +4,7 @@ from diffusers import LMSDiscreteScheduler, DDIMScheduler
 import git
 import json
 import numpy as np
+from pathlib import Path
 
 from mixdiff import StableDiffusionTilingPipeline
 
@@ -89,8 +90,12 @@ for _ in range(n):
     image = pipe(**pipeargs)["sample"][0]
     ct = datetime.datetime.now()
     outname = f"{ct}_{prompt[0][0][0:100]}_{tile_height}x{tile_width}_sche{sche}_seed{seed_image}_gc{gc_image}_steps{steps_image}"
-    image.save(f"outputs/{outname}.png")
-    with open(f"logs/{outname}.json", "w") as f:
+    outpath = "./outputs"
+    Path(outpath).mkdir(parents=True, exist_ok=True)
+    image.save(f"{outpath}/{outname}.png")
+    logspath = "./logs"
+    Path(logspath).mkdir(parents=True, exist_ok=True)
+    with open(f"{logspath}/{outname}.json", "w") as f:
         json.dump(
             {
                 "prompt": prompt,
