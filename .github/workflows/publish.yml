@@ -18,6 +18,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install build
+      - name: Get release tag
+        id: tag
+        uses: dawidd6/action-get-tag@v1
       - name: Build package
         run: GITHUB_TAG=${{steps.tag.outputs.tag}} python -m build
       - name: Publish package
@@ -43,6 +46,9 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install build
+    - name: Get release tag
+      id: tag
+      uses: dawidd6/action-get-tag@v1
     - name: Build package
       run: GITHUB_TAG=${{steps.tag.outputs.tag}} python -m build
     - name: Publish package
