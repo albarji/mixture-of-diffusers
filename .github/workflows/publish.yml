@@ -1,0 +1,87 @@
+name: Publish package on PyPI
+
+on: [push]
+
+jobs:
+  test-publish-package:
+    runs-on: ubuntu-latest
+    name: publish package on test-PyPI
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build
+      - name: Build package
+        run: GITHUB_TAG=${{steps.tag.outputs.tag}} python -m build
+      - name: Install package
+        run: |
+          pip install .
+      - name: Publish package
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository_url: https://test.pypi.org/legacy/
+          user: __token__
+          password: ${{ secrets.TESTPYPI_API_TOKEN }}
+
+    publish-package:
+      runs-on: ubuntu-latest
+      name: publish package on PyPI
+      if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
+      needs: test-publish-package
+
+      steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install build
+      - name: Build package
+        run: GITHUB_TAG=${{steps.tag.outputs.tag}} python -m build
+      - name: Install package
+        run: |
+          pip install .
+      - name: Publish package
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }}
+
+  test-package-download:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.9", "3.10"]
+    name: test package works by installing from test-PyPI
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags')
+    needs: publish-package
+
+    steps:
+      - uses: actions/checkout@v3
+      - name: Erase source code
+        run: rm -rf mixdiff
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Get release tag
+        id: tag
+        uses: dawidd6/action-get-tag@v1
+      - name: Install package
+        run: python -m pip install mixdiff==${{steps.tag.outputs.tag}}
+      - name: Test with pytest
+        env:
+          HUGGING_FACE_HUB_TOKEN: ${{ secrets.huggingface_token }}
+        run: |
+          pip install pytest
+          pytest
