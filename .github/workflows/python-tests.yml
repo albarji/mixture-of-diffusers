@@ -60,4 +60,5 @@ jobs:
           HUGGING_FACE_HUB_TOKEN: ${{ secrets.huggingface_token }}
         run: |
           pip install pytest
+          rm -rf mixdiff  # Delete source to test installed package
           pytest
