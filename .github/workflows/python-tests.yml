@@ -34,7 +34,7 @@ jobs:
       run: |
         conda install pytest && pytest
 
-test-package:
+  test-package:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
