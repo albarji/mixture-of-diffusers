@@ -3,6 +3,7 @@
 ![2022-10-12 15_35_27 305133_A charming house in the countryside, by jakub rozalski, sunset lighting, elegant, highly detailed, s_640x640_schelms_seed7178915308_gc8_steps50](https://user-images.githubusercontent.com/9654655/195362341-bc7766c2-f5c6-40f2-b457-59277aa11027.png)
 
 [![Unit tests](https://github.com/albarji/mixture-of-diffusers/actions/workflows/python-tests.yml/badge.svg)](https://github.com/albarji/mixture-of-diffusers/actions/workflows/python-tests.yml)
+[![Replicate](https://replicate.com/daanelson/mixture-of-diffusers/badge)](https://replicate.com/daanelson/mixture-of-diffusers)
 
 This repository holds various scripts and tools implementing a method for integrating a mixture of different diffusion processes collaborating to generate a single image. Each diffuser focuses on a particular region on the image, taking into account boundary effects to promote a smooth blending.
 
