@@ -24,12 +24,12 @@ setup(
         'torchvision>=0.10,<1',
         'tqdm>=4.62,<5',
         'scipy==1.10.*',
-        'diffusers[torch]==0.7.*',
+        'diffusers[torch]==0.16.*',
         'ftfy==6.1.*',
         'gitpython==3.1.*',
         'ligo-segments==1.4.*',
         'torchvision==0.14.*',
-        'transformers==4.21.*'
+        'transformers==4.29.*'
     ],
     author="Alvaro Barbero",
     url='https://github.com/albarji/mixture-of-diffusers',
