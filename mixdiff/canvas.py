@@ -299,7 +299,7 @@ class StableDiffusionCanvasPipeline(DiffusionPipeline):
             region.encode_prompt(self.text_encoder, self.device)
 
         # Create original noisy latents using the timesteps
-        latents_shape = (batch_size, self.unet.in_channels, canvas_height // 8, canvas_width // 8)
+        latents_shape = (batch_size, self.unet.config.in_channels, canvas_height // 8, canvas_width // 8)
         generator = torch.Generator(self.device).manual_seed(seed)
         init_noise = torch.randn(latents_shape, generator=generator, device=self.device)
 
@@ -338,7 +338,7 @@ class StableDiffusionCanvasPipeline(DiffusionPipeline):
             region.encode_reference_image(self.vae, device=self.device, generator=generator)
 
         # Prepare mask of weights for each region
-        mask_builder = MaskWeightsBuilder(latent_space_dim=self.unet.in_channels, nbatch=batch_size)
+        mask_builder = MaskWeightsBuilder(latent_space_dim=self.unet.config.in_channels, nbatch=batch_size)
         mask_weights = [mask_builder.compute_mask_weights(region).to(self.device) for region in text2image_regions]
 
         # Diffusion timesteps

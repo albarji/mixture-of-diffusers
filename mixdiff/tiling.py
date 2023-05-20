@@ -82,7 +82,7 @@ class StableDiffusionTilingPipeline(DiffusionPipeline, StableDiffusionExtrasMixi
         # create original noisy latents using the timesteps
         height = tile_height + (grid_rows - 1) * (tile_height - tile_row_overlap)
         width = tile_width + (grid_cols - 1) * (tile_width - tile_col_overlap)
-        latents_shape = (batch_size, self.unet.in_channels, height // 8, width // 8)
+        latents_shape = (batch_size, self.unet.config.in_channels, height // 8, width // 8)
         generator = torch.Generator("cuda").manual_seed(seed)
         latents = torch.randn(latents_shape, generator=generator, device=self.device)
 
@@ -204,10 +204,7 @@ class StableDiffusionTilingPipeline(DiffusionPipeline, StableDiffusionExtrasMixi
             noise_pred /= contributors
 
             # compute the previous noisy sample x_t -> x_t-1
-            if isinstance(self.scheduler, LMSDiscreteScheduler):
-                latents = self.scheduler.step(noise_pred, i, latents, **extra_step_kwargs)["prev_sample"]
-            else:
-                latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs)["prev_sample"]
+            latents = self.scheduler.step(noise_pred, t, latents).prev_sample
 
         # scale and decode the image latents with vae
         image = self.decode_latents(latents, cpu_vae)
@@ -229,7 +226,7 @@ class StableDiffusionTilingPipeline(DiffusionPipeline, StableDiffusionExtrasMixi
         y_probs = [exp(-(y-midpoint)*(y-midpoint)/(latent_height*latent_height)/(2*var)) / sqrt(2*pi*var) for y in range(latent_height)]
         
         weights = np.outer(y_probs, x_probs)
-        return torch.tile(torch.tensor(weights, device=self.device), (nbatches, self.unet.in_channels, 1, 1))
+        return torch.tile(torch.tensor(weights, device=self.device), (nbatches, self.unet.config.in_channels, 1, 1))
 
 
 
