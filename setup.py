@@ -28,7 +28,8 @@ setup(
         'ftfy==6.1.*',
         'gitpython==3.1.*',
         'ligo-segments==1.4.*',
-        'torchvision==0.14.*',
+        'torch==2.0.*',
+        'torchvision==0.15.*',
         'transformers==4.29.*'
     ],
     author="Alvaro Barbero",
