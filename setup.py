@@ -20,8 +20,6 @@ setup(
     packages=['mixdiff'],
     install_requires=[
         'numpy>=1.19,<2',
-        'torch>=1.9,<2',
-        'torchvision>=0.10,<1',
         'tqdm>=4.62,<5',
         'scipy==1.10.*',
         'diffusers[torch]==0.16.*',
